@@ -4,11 +4,11 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <title>AI Video Editor - Online Video Editing</title>
+  <title>AI Video Editor</title>
 
   <meta
     name="description"
-    content="Free online AI Video Editor. Trim, rotate, flip, crop, adjust video, change speed, volume and download edited video."
+    content="Online AI Video Editor - Trim, edit, add text, filters and download videos."
   >
 
   <link rel="stylesheet" href="style.css">
@@ -17,19 +17,22 @@
 <body>
 
 <header class="topbar">
+
   <div class="brand">
-    🎬 <span>AI Video Editor</span>
+    🎬 AI Video Editor
   </div>
 
   <button id="newProjectBtn" class="small-btn">
     + नया वीडियो
   </button>
+
 </header>
 
 
 <main class="container">
 
-  <!-- Upload -->
+  <!-- UPLOAD -->
+
   <section id="uploadSection" class="upload-section">
 
     <div id="dropZone" class="drop-zone">
@@ -39,22 +42,25 @@
       <h1>अपना वीडियो एडिट करें</h1>
 
       <p>
-        वीडियो चुनें और Trim, Crop, Rotate, Filter, Speed,
-        Volume आदि बदलें।
+        Trim, Text, Color, Font, Filter, Speed और
+        दूसरे editing options इस्तेमाल करें।
       </p>
 
       <label class="upload-btn">
+
         📁 वीडियो चुनें
+
         <input
           type="file"
           id="videoInput"
           accept="video/*"
           hidden
         >
+
       </label>
 
       <p class="small-note">
-        Processing आपके browser में होती है।
+        Basic processing आपके browser में होती है।
       </p>
 
     </div>
@@ -62,10 +68,15 @@
   </section>
 
 
-  <!-- Editor -->
-  <section id="editorSection" class="editor hidden">
+  <!-- EDITOR -->
 
-    <!-- Video preview -->
+  <section
+    id="editorSection"
+    class="editor hidden"
+  >
+
+    <!-- PREVIEW -->
+
     <div class="preview-panel">
 
       <div class="video-wrapper">
@@ -76,7 +87,17 @@
           playsinline
         ></video>
 
+        <!-- LIVE TEXT PREVIEW -->
+
+        <div
+          id="liveText"
+          class="live-text hidden"
+        >
+          आपका Text
+        </div>
+
       </div>
+
 
       <div class="video-info">
 
@@ -93,24 +114,37 @@
     </div>
 
 
-    <!-- Controls -->
+    <!-- CONTROLS -->
+
     <div class="controls-panel">
 
       <div class="tabs">
 
-        <button class="tab active" data-tab="basic">
+        <button
+          class="tab active"
+          data-tab="basic"
+        >
           ✂️ Basic
         </button>
 
-        <button class="tab" data-tab="look">
+        <button
+          class="tab"
+          data-tab="look"
+        >
           🎨 Look
         </button>
 
-        <button class="tab" data-tab="audio">
+        <button
+          class="tab"
+          data-tab="audio"
+        >
           🔊 Audio
         </button>
 
-        <button class="tab" data-tab="text">
+        <button
+          class="tab"
+          data-tab="text"
+        >
           📝 Text
         </button>
 
@@ -118,14 +152,21 @@
 
 
       <!-- BASIC -->
-      <div class="tab-content active" id="basic">
+
+      <div
+        class="tab-content active"
+        id="basic"
+      >
 
         <h2>✂️ Trim Video</h2>
 
         <div class="range-grid">
 
           <div>
-            <label>Start</label>
+
+            <label>
+              Start
+            </label>
 
             <input
               id="startTime"
@@ -136,10 +177,15 @@
             >
 
             <span>seconds</span>
+
           </div>
 
+
           <div>
-            <label>End</label>
+
+            <label>
+              End
+            </label>
 
             <input
               id="endTime"
@@ -150,6 +196,7 @@
             >
 
             <span>seconds</span>
+
           </div>
 
         </div>
@@ -178,7 +225,7 @@
         </div>
 
 
-        <h2>📐 Video Size</h2>
+        <h2>📐 Resolution</h2>
 
         <select id="resolution">
 
@@ -204,13 +251,19 @@
 
 
       <!-- LOOK -->
-      <div class="tab-content" id="look">
+
+      <div
+        class="tab-content"
+        id="look"
+      >
 
         <h2>🎨 Video Adjustments</h2>
 
         <label>
           Brightness:
-          <span id="brightnessValue">0</span>
+          <span id="brightnessValue">
+            0
+          </span>
         </label>
 
         <input
@@ -225,7 +278,9 @@
 
         <label>
           Contrast:
-          <span id="contrastValue">1</span>
+          <span id="contrastValue">
+            1
+          </span>
         </label>
 
         <input
@@ -240,7 +295,9 @@
 
         <label>
           Saturation:
-          <span id="saturationValue">1</span>
+          <span id="saturationValue">
+            1
+          </span>
         </label>
 
         <input
@@ -257,19 +314,31 @@
 
         <div class="button-grid">
 
-          <button class="filter-btn active-filter" data-filter="none">
+          <button
+            class="filter-btn active-filter"
+            data-filter="none"
+          >
             Normal
           </button>
 
-          <button class="filter-btn" data-filter="gray">
+          <button
+            class="filter-btn"
+            data-filter="gray"
+          >
             Black & White
           </button>
 
-          <button class="filter-btn" data-filter="sepia">
+          <button
+            class="filter-btn"
+            data-filter="sepia"
+          >
             Sepia
           </button>
 
-          <button class="filter-btn" data-filter="vintage">
+          <button
+            class="filter-btn"
+            data-filter="vintage"
+          >
             Vintage
           </button>
 
@@ -279,13 +348,19 @@
 
 
       <!-- AUDIO -->
-      <div class="tab-content" id="audio">
+
+      <div
+        class="tab-content"
+        id="audio"
+      >
 
         <h2>🔊 Volume</h2>
 
         <label>
           Volume:
-          <span id="volumeValue">100%</span>
+          <span id="volumeValue">
+            100%
+          </span>
         </label>
 
         <input
@@ -297,7 +372,11 @@
           value="1"
         >
 
-        <button id="muteBtn" class="wide-btn">
+
+        <button
+          id="muteBtn"
+          class="wide-btn"
+        >
           🔇 Mute Video
         </button>
 
@@ -306,39 +385,286 @@
 
         <select id="speed">
 
-          <option value="0.25">0.25x</option>
-          <option value="0.5">0.5x</option>
-          <option value="0.75">0.75x</option>
-          <option value="1" selected>1x Normal</option>
-          <option value="1.25">1.25x</option>
-          <option value="1.5">1.5x</option>
-          <option value="2">2x</option>
+          <option value="0.25">
+            0.25x
+          </option>
+
+          <option value="0.5">
+            0.5x
+          </option>
+
+          <option value="0.75">
+            0.75x
+          </option>
+
+          <option
+            value="1"
+            selected
+          >
+            1x Normal
+          </option>
+
+          <option value="1.25">
+            1.25x
+          </option>
+
+          <option value="1.5">
+            1.5x
+          </option>
+
+          <option value="2">
+            2x
+          </option>
 
         </select>
 
       </div>
 
 
-      <!-- TEXT -->
-      <div class="tab-content" id="text">
+      <!-- TEXT DESIGNER -->
 
-        <h2>📝 Text Overlay</h2>
+      <div
+        class="tab-content"
+        id="text"
+      >
+
+        <h2>📝 Text Designer</h2>
+
+        <label>
+          अपना Text लिखें
+        </label>
+
+        <textarea
+          id="overlayText"
+          rows="3"
+          placeholder="यहाँ अपना Text लिखें..."
+        ></textarea>
+
+
+        <div class="designer-grid">
+
+          <div>
+
+            <label>
+              Text Color
+            </label>
+
+            <input
+              id="textColor"
+              type="color"
+              value="#ffffff"
+            >
+
+          </div>
+
+
+          <div>
+
+            <label>
+              Background
+            </label>
+
+            <input
+              id="textBgColor"
+              type="color"
+              value="#000000"
+            >
+
+          </div>
+
+        </div>
+
+
+        <label class="checkbox-row">
+
+          <input
+            id="transparentBg"
+            type="checkbox"
+            checked
+          >
+
+          Transparent Background
+
+        </label>
+
+
+        <label>
+          Text Size:
+          <span id="textSizeValue">
+            48px
+          </span>
+        </label>
 
         <input
-          id="overlayText"
-          type="text"
-          placeholder="वीडियो पर अपना Text लिखें"
+          id="textSize"
+          type="range"
+          min="18"
+          max="180"
+          value="48"
         >
 
-        <p class="info">
-          Text preview में दिखाई देगा। Export के दौरान
-          text overlay को भी process किया जाएगा।
-        </p>
+
+        <h3>
+          ✍️ Font Design
+        </h3>
+
+        <select id="fontFamily">
+
+          <option value="Arial">
+            Arial
+          </option>
+
+          <option value="Georgia">
+            Georgia
+          </option>
+
+          <option value="Verdana">
+            Verdana
+          </option>
+
+          <option value="Trebuchet MS">
+            Trebuchet MS
+          </option>
+
+          <option value="Courier New">
+            Courier New
+          </option>
+
+          <option value="Impact">
+            Impact
+          </option>
+
+          <option value="Times New Roman">
+            Times New Roman
+          </option>
+
+        </select>
+
+
+        <h3>
+          🖋️ लिखावट Style
+        </h3>
+
+        <div class="button-grid">
+
+          <button
+            class="font-style-btn active-font-style"
+            data-font-style="normal"
+          >
+            Normal
+          </button>
+
+          <button
+            class="font-style-btn"
+            data-font-style="bold"
+          >
+            Bold
+          </button>
+
+          <button
+            class="font-style-btn"
+            data-font-style="italic"
+          >
+            Italic
+          </button>
+
+          <button
+            class="font-style-btn"
+            data-font-style="bolditalic"
+          >
+            Bold Italic
+          </button>
+
+        </div>
+
+
+        <h3>
+          ↔️ Alignment
+        </h3>
+
+        <div class="button-grid">
+
+          <button
+            class="align-btn"
+            data-align="left"
+          >
+            Left
+          </button>
+
+          <button
+            class="align-btn active-align"
+            data-align="center"
+          >
+            Center
+          </button>
+
+          <button
+            class="align-btn"
+            data-align="right"
+          >
+            Right
+          </button>
+
+        </div>
+
+
+        <h3>
+          📍 Text Position
+        </h3>
+
+        <select id="textPosition">
+
+          <option value="top">
+            Top
+          </option>
+
+          <option
+            value="middle"
+            selected
+          >
+            Middle
+          </option>
+
+          <option value="bottom">
+            Bottom
+          </option>
+
+        </select>
+
+
+        <label class="checkbox-row">
+
+          <input
+            id="textShadow"
+            type="checkbox"
+            checked
+          >
+
+          🌑 Text Shadow
+
+        </label>
+
+
+        <div class="text-preview-box">
+
+          <span>
+            Live Text Preview
+          </span>
+
+          <div
+            id="designerPreview"
+            class="designer-preview"
+          >
+            आपका Text
+          </div>
+
+        </div>
 
       </div>
 
 
-      <!-- Export -->
+      <!-- EXPORT -->
+
       <div class="export-area">
 
         <button
@@ -348,12 +674,14 @@
           🚀 Export Video
         </button>
 
+
         <div
           id="progressBox"
           class="progress-box hidden"
         >
 
           <div class="progress-text">
+
             <span id="progressText">
               Processing...
             </span>
@@ -361,26 +689,29 @@
             <span id="progressPercent">
               0%
             </span>
+
           </div>
 
+
           <div class="progress-track">
+
             <div
               id="progressBar"
               class="progress-bar"
             ></div>
+
           </div>
 
         </div>
 
 
-        <!-- Download -->
         <div
           id="downloadBox"
           class="download-box hidden"
         >
 
           <h3>
-            ✅ आपका edited video तैयार है
+            ✅ Edited Video तैयार है
           </h3>
 
           <a
@@ -421,4 +752,4 @@
 <script src="app.js"></script>
 
 </body>
-               </html>
+            </html>
