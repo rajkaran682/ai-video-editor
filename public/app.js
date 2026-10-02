@@ -1,4 +1,54 @@
 "use strict";
+/*
+  Fix FFmpeg.wasm cross-origin Worker error.
+
+  FFmpeg's UMD build tries to create its internal worker
+  directly from jsDelivr. Browsers can block that worker
+  because our website is running on another origin.
+
+  This wrapper converts the remote worker URL into a
+  same-page Blob Worker.
+*/
+
+const NativeWorker = window.Worker;
+
+window.Worker = function (scriptURL, options) {
+
+  const url = String(scriptURL);
+
+  if (
+    url.includes("cdn.jsdelivr.net") &&
+    url.includes("814.ffmpeg.js")
+  ) {
+
+    const workerCode = `
+      importScripts(${JSON.stringify(url)});
+    `;
+
+    const blob = new Blob(
+      [workerCode],
+      {
+        type: "text/javascript"
+      }
+    );
+
+    const blobURL =
+      URL.createObjectURL(blob);
+
+    return new NativeWorker(
+      blobURL,
+      options
+    );
+  }
+
+  return new NativeWorker(
+    scriptURL,
+    options
+  );
+};
+
+window.Worker.prototype =
+  NativeWorker.prototype;
 
 /*
   AI Video Editor
