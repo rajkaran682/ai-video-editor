@@ -1,14 +1,9 @@
 "use strict";
-/*
-  Fix FFmpeg.wasm cross-origin Worker error.
 
-  FFmpeg's UMD build tries to create its internal worker
-  directly from jsDelivr. Browsers can block that worker
-  because our website is running on another origin.
 
-  This wrapper converts the remote worker URL into a
-  same-page Blob Worker.
-*/
+/* =====================================================
+   FFmpeg Worker Cross-Origin Fix
+===================================================== */
 
 const NativeWorker = window.Worker;
 
@@ -50,82 +45,169 @@ window.Worker = function (scriptURL, options) {
 window.Worker.prototype =
   NativeWorker.prototype;
 
-/*
-  AI Video Editor
-  Browser-side FFmpeg.wasm editor
-*/
+
+/* =====================================================
+   HELPERS
+===================================================== */
+
+const $ = (id) =>
+  document.getElementById(id);
 
 
-const $ = (id) => document.getElementById(id);
-
+/* =====================================================
+   STATE
+===================================================== */
 
 let videoFile = null;
-let videoURL = null;
 
-let ffmpeg = null;
-let ffmpegLoaded = false;
+let videoURL = null;
 
 let outputURL = null;
 
+let ffmpeg = null;
+
+let ffmpegLoaded = false;
+
 let rotate = 0;
+
 let flipH = false;
+
 let flipV = false;
 
 let selectedFilter = "none";
+
 let muted = false;
 
+let fontStyle = "normal";
 
-/* -----------------------------
+let textAlign = "center";
+
+
+/* =====================================================
    ELEMENTS
------------------------------ */
+===================================================== */
 
-const videoInput = $("videoInput");
-const dropZone = $("dropZone");
+const videoInput =
+  $("videoInput");
 
-const videoPreview = $("videoPreview");
+const dropZone =
+  $("dropZone");
 
-const uploadSection = $("uploadSection");
-const editorSection = $("editorSection");
+const videoPreview =
+  $("videoPreview");
 
-const fileName = $("fileName");
-const videoDuration = $("videoDuration");
+const liveText =
+  $("liveText");
 
-const startTime = $("startTime");
-const endTime = $("endTime");
+const uploadSection =
+  $("uploadSection");
 
-const resolution = $("resolution");
+const editorSection =
+  $("editorSection");
 
-const brightness = $("brightness");
-const contrast = $("contrast");
-const saturation = $("saturation");
+const fileName =
+  $("fileName");
 
-const brightnessValue = $("brightnessValue");
-const contrastValue = $("contrastValue");
-const saturationValue = $("saturationValue");
+const videoDuration =
+  $("videoDuration");
 
-const volume = $("volume");
-const volumeValue = $("volumeValue");
+const startTime =
+  $("startTime");
 
-const speed = $("speed");
+const endTime =
+  $("endTime");
 
-const muteBtn = $("muteBtn");
+const resolution =
+  $("resolution");
 
-const exportBtn = $("exportBtn");
+const brightness =
+  $("brightness");
 
-const progressBox = $("progressBox");
-const progressBar = $("progressBar");
-const progressText = $("progressText");
-const progressPercent = $("progressPercent");
+const contrast =
+  $("contrast");
 
-const downloadBox = $("downloadBox");
-const downloadBtn = $("downloadBtn");
+const saturation =
+  $("saturation");
 
-const overlayText = $("overlayText");
+const brightnessValue =
+  $("brightnessValue");
+
+const contrastValue =
+  $("contrastValue");
+
+const saturationValue =
+  $("saturationValue");
+
+const volume =
+  $("volume");
+
+const volumeValue =
+  $("volumeValue");
+
+const speed =
+  $("speed");
+
+const muteBtn =
+  $("muteBtn");
+
+const exportBtn =
+  $("exportBtn");
+
+const progressBox =
+  $("progressBox");
+
+const progressBar =
+  $("progressBar");
+
+const progressText =
+  $("progressText");
+
+const progressPercent =
+  $("progressPercent");
+
+const downloadBox =
+  $("downloadBox");
+
+const downloadBtn =
+  $("downloadBtn");
 
 
-/* -----------------------------
-   FORMAT TIME
------------------------------ */
+/* TEXT CONTROLS */
+
+const overlayText =
+  $("overlayText");
+
+const textColor =
+  $("textColor");
+
+const textBgColor =
+  $("textBgColor");
+
+const transparentBg =
+  $("transparentBg");
+
+const textSize =
+  $("textSize");
+
+const textSizeValue =
+  $("textSizeValue");
+
+const fontFamily =
+  $("fontFamily");
+
+const textPosition =
+  $("textPosition");
+
+const textShadow =
+  $("textShadow");
+
+const designerPreview =
+  $("designerPreview");
+
+
+/* =====================================================
+   TIME
+===================================================== */
 
 function formatTime(seconds) {
 
@@ -133,17 +215,19 @@ function formatTime(seconds) {
     return "00:00";
   }
 
-  seconds = Math.max(0, seconds);
+  seconds =
+    Math.max(0, seconds);
 
-  const h = Math.floor(seconds / 3600);
+  const h =
+    Math.floor(seconds / 3600);
 
-  const m = Math.floor(
-    (seconds % 3600) / 60
-  );
+  const m =
+    Math.floor(
+      (seconds % 3600) / 60
+    );
 
-  const s = Math.floor(
-    seconds % 60
-  );
+  const s =
+    Math.floor(seconds % 60);
 
   if (h > 0) {
 
@@ -165,13 +249,13 @@ function formatTime(seconds) {
 }
 
 
-/* -----------------------------
-   FILE LOAD
------------------------------ */
+/* =====================================================
+   VIDEO LOAD
+===================================================== */
 
 videoInput.addEventListener(
   "change",
-  (event) => {
+  event => {
 
     const file =
       event.target.files &&
@@ -180,21 +264,19 @@ videoInput.addEventListener(
     if (file) {
       loadVideo(file);
     }
-
   }
 );
 
 
-/* Drag & Drop */
-
 dropZone.addEventListener(
   "dragover",
-  (event) => {
+  event => {
 
     event.preventDefault();
 
-    dropZone.classList.add("dragging");
-
+    dropZone.classList.add(
+      "dragging"
+    );
   }
 );
 
@@ -203,19 +285,22 @@ dropZone.addEventListener(
   "dragleave",
   () => {
 
-    dropZone.classList.remove("dragging");
-
+    dropZone.classList.remove(
+      "dragging"
+    );
   }
 );
 
 
 dropZone.addEventListener(
   "drop",
-  (event) => {
+  event => {
 
     event.preventDefault();
 
-    dropZone.classList.remove("dragging");
+    dropZone.classList.remove(
+      "dragging"
+    );
 
     const file =
       event.dataTransfer.files &&
@@ -225,29 +310,30 @@ dropZone.addEventListener(
       file &&
       file.type.startsWith("video/")
     ) {
-      loadVideo(file);
-    }
 
+      loadVideo(file);
+
+    }
   }
 );
 
-
-/* -----------------------------
-   LOAD VIDEO
------------------------------ */
 
 function loadVideo(file) {
 
   videoFile = file;
 
   if (videoURL) {
-    URL.revokeObjectURL(videoURL);
+
+    URL.revokeObjectURL(
+      videoURL
+    );
   }
 
   videoURL =
     URL.createObjectURL(file);
 
-  videoPreview.src = videoURL;
+  videoPreview.src =
+    videoURL;
 
   fileName.textContent =
     file.name;
@@ -260,24 +346,21 @@ function loadVideo(file) {
     "hidden"
   );
 
-  resetEditorValues();
+  resetEditor();
 
   videoPreview.load();
 
   videoPreview.addEventListener(
     "loadedmetadata",
-    onVideoMetadata,
-    { once: true }
+    onMetadata,
+    {
+      once: true
+    }
   );
-
 }
 
 
-/* -----------------------------
-   VIDEO METADATA
------------------------------ */
-
-function onVideoMetadata() {
+function onMetadata() {
 
   const duration =
     videoPreview.duration;
@@ -285,25 +368,26 @@ function onVideoMetadata() {
   videoDuration.textContent =
     formatTime(duration);
 
-  startTime.value = "0";
+  startTime.value =
+    "0";
 
   endTime.value =
     duration.toFixed(1);
 
-  endTime.max =
+  startTime.max =
     duration;
 
-  startTime.max =
+  endTime.max =
     duration;
 
 }
 
 
-/* -----------------------------
+/* =====================================================
    RESET
------------------------------ */
+===================================================== */
 
-function resetEditorValues() {
+function resetEditor() {
 
   rotate = 0;
 
@@ -311,49 +395,141 @@ function resetEditorValues() {
 
   flipV = false;
 
-  selectedFilter = "none";
+  selectedFilter =
+    "none";
 
   muted = false;
 
-  brightness.value = 0;
-  contrast.value = 1;
-  saturation.value = 1;
+  fontStyle =
+    "normal";
 
-  volume.value = 1;
+  textAlign =
+    "center";
 
-  speed.value = 1;
+  brightness.value =
+    "0";
 
-  brightnessValue.textContent = "0";
-  contrastValue.textContent = "1";
-  saturationValue.textContent = "1";
+  contrast.value =
+    "1";
 
-  volumeValue.textContent = "100%";
+  saturation.value =
+    "1";
 
-  overlayText.value = "";
+  volume.value =
+    "1";
+
+  speed.value =
+    "1";
+
+  overlayText.value =
+    "";
+
+  textColor.value =
+    "#ffffff";
+
+  textBgColor.value =
+    "#000000";
+
+  transparentBg.checked =
+    true;
+
+  textSize.value =
+    "48";
+
+  fontFamily.value =
+    "Arial";
+
+  textPosition.value =
+    "middle";
+
+  textShadow.checked =
+    true;
+
+  brightnessValue.textContent =
+    "0";
+
+  contrastValue.textContent =
+    "1";
+
+  saturationValue.textContent =
+    "1";
+
+  volumeValue.textContent =
+    "100%";
+
+  textSizeValue.textContent =
+    "48px";
 
   muteBtn.textContent =
     "🔇 Mute Video";
 
   document
     .querySelectorAll(".filter-btn")
-    .forEach((button) => {
+    .forEach(button => {
 
       button.classList.remove(
         "active-filter"
       );
-
     });
 
-  const normal =
+  const normalFilter =
     document.querySelector(
       '[data-filter="none"]'
     );
 
-  if (normal) {
-    normal.classList.add(
+  if (normalFilter) {
+
+    normalFilter.classList.add(
       "active-filter"
     );
   }
+
+  document
+    .querySelectorAll(
+      ".font-style-btn"
+    )
+    .forEach(button => {
+
+      button.classList.remove(
+        "active-font-style"
+      );
+    });
+
+  const normalStyle =
+    document.querySelector(
+      '[data-font-style="normal"]'
+    );
+
+  if (normalStyle) {
+
+    normalStyle.classList.add(
+      "active-font-style"
+    );
+  }
+
+  document
+    .querySelectorAll(".align-btn")
+    .forEach(button => {
+
+      button.classList.remove(
+        "active-align"
+      );
+    });
+
+  const centerAlign =
+    document.querySelector(
+      '[data-align="center"]'
+    );
+
+  if (centerAlign) {
+
+    centerAlign.classList.add(
+      "active-align"
+    );
+  }
+
+  liveText.className =
+    "live-text hidden";
 
   videoPreview.style.filter =
     "none";
@@ -361,14 +537,16 @@ function resetEditorValues() {
   videoPreview.style.transform =
     "none";
 
+  updateTextPreview();
+
 }
 
 
-/* -----------------------------
-   LIVE PREVIEW
------------------------------ */
+/* =====================================================
+   VIDEO PREVIEW
+===================================================== */
 
-function updatePreview() {
+function updateVideoPreview() {
 
   const b =
     Number(brightness.value);
@@ -384,27 +562,36 @@ function updatePreview() {
     `contrast(${c}) ` +
     `saturate(${s})`;
 
-  if (selectedFilter === "gray") {
-
-    filter += " grayscale(1)";
-
-  }
-
-  if (selectedFilter === "sepia") {
-
-    filter += " sepia(0.8)";
-
-  }
-
-  if (selectedFilter === "vintage") {
+  if (
+    selectedFilter ===
+    "gray"
+  ) {
 
     filter +=
-      " sepia(0.35) contrast(1.1)";
+      " grayscale(1)";
+  }
 
+  if (
+    selectedFilter ===
+    "sepia"
+  ) {
+
+    filter +=
+      " sepia(.8)";
+  }
+
+  if (
+    selectedFilter ===
+    "vintage"
+  ) {
+
+    filter +=
+      " sepia(.35) contrast(1.1)";
   }
 
   videoPreview.style.filter =
     filter;
+
 
   let transform = "";
 
@@ -412,30 +599,28 @@ function updatePreview() {
 
     transform +=
       `rotate(${rotate}deg) `;
-
   }
 
   if (flipH) {
 
-    transform += "scaleX(-1) ";
-
+    transform +=
+      "scaleX(-1) ";
   }
 
   if (flipV) {
 
-    transform += "scaleY(-1) ";
-
+    transform +=
+      "scaleY(-1) ";
   }
 
   videoPreview.style.transform =
     transform || "none";
-
 }
 
 
-/* -----------------------------
-   RANGE CONTROLS
------------------------------ */
+/* =====================================================
+   VIDEO CONTROLS
+===================================================== */
 
 brightness.addEventListener(
   "input",
@@ -444,8 +629,7 @@ brightness.addEventListener(
     brightnessValue.textContent =
       brightness.value;
 
-    updatePreview();
-
+    updateVideoPreview();
   }
 );
 
@@ -457,8 +641,7 @@ contrast.addEventListener(
     contrastValue.textContent =
       contrast.value;
 
-    updatePreview();
-
+    updateVideoPreview();
   }
 );
 
@@ -470,8 +653,7 @@ saturation.addEventListener(
     saturationValue.textContent =
       saturation.value;
 
-    updatePreview();
-
+    updateVideoPreview();
   }
 );
 
@@ -480,14 +662,15 @@ volume.addEventListener(
   "input",
   () => {
 
-    volumeValue.textContent =
-      Math.round(
-        Number(volume.value) * 100
-      ) + "%";
-
-    videoPreview.volume =
+    const value =
       Number(volume.value);
 
+    volumeValue.textContent =
+      Math.round(value * 100) +
+      "%";
+
+    videoPreview.volume =
+      value;
   }
 );
 
@@ -498,14 +681,13 @@ speed.addEventListener(
 
     videoPreview.playbackRate =
       Number(speed.value);
-
   }
 );
 
 
-/* -----------------------------
-   TRIM VALIDATION
------------------------------ */
+/* =====================================================
+   TRIM
+===================================================== */
 
 startTime.addEventListener(
   "change",
@@ -517,19 +699,17 @@ startTime.addEventListener(
     const duration =
       videoPreview.duration;
 
-    if (!Number.isFinite(value)) {
-      value = 0;
-    }
-
     value =
       Math.max(
         0,
-        Math.min(value, duration)
+        Math.min(
+          value,
+          duration
+        )
       );
 
     startTime.value =
       value.toFixed(1);
-
   }
 );
 
@@ -544,107 +724,108 @@ endTime.addEventListener(
     const duration =
       videoPreview.duration;
 
-    if (!Number.isFinite(value)) {
-      value = duration;
-    }
-
     value =
       Math.max(
         0,
-        Math.min(value, duration)
+        Math.min(
+          value,
+          duration
+        )
       );
 
     endTime.value =
       value.toFixed(1);
-
   }
 );
 
 
-/* -----------------------------
+/* =====================================================
    ROTATE
------------------------------ */
+===================================================== */
 
-$("rotateLeft").addEventListener(
-  "click",
-  () => {
+$("rotateLeft")
+  .addEventListener(
+    "click",
+    () => {
 
-    rotate -= 90;
+      rotate -= 90;
 
-    if (rotate <= -360) {
-      rotate = 0;
+      if (rotate <= -360) {
+        rotate = 0;
+      }
+
+      updateVideoPreview();
     }
-
-    updatePreview();
-
-  }
-);
+  );
 
 
-$("rotateRight").addEventListener(
-  "click",
-  () => {
+$("rotateRight")
+  .addEventListener(
+    "click",
+    () => {
 
-    rotate += 90;
+      rotate += 90;
 
-    if (rotate >= 360) {
-      rotate = 0;
+      if (rotate >= 360) {
+        rotate = 0;
+      }
+
+      updateVideoPreview();
     }
-
-    updatePreview();
-
-  }
-);
+  );
 
 
-/* -----------------------------
+/* =====================================================
    FLIP
------------------------------ */
+===================================================== */
 
-$("flipH").addEventListener(
-  "click",
-  () => {
+$("flipH")
+  .addEventListener(
+    "click",
+    () => {
 
-    flipH = !flipH;
+      flipH =
+        !flipH;
 
-    updatePreview();
-
-  }
-);
-
-
-$("flipV").addEventListener(
-  "click",
-  () => {
-
-    flipV = !flipV;
-
-    updatePreview();
-
-  }
-);
+      updateVideoPreview();
+    }
+  );
 
 
-/* -----------------------------
-   FILTER
------------------------------ */
+$("flipV")
+  .addEventListener(
+    "click",
+    () => {
+
+      flipV =
+        !flipV;
+
+      updateVideoPreview();
+    }
+  );
+
+
+/* =====================================================
+   FILTERS
+===================================================== */
 
 document
   .querySelectorAll(".filter-btn")
-  .forEach((button) => {
+  .forEach(button => {
 
     button.addEventListener(
       "click",
       () => {
 
         document
-          .querySelectorAll(".filter-btn")
-          .forEach((b) => {
+          .querySelectorAll(
+            ".filter-btn"
+          )
+          .forEach(b => {
 
             b.classList.remove(
               "active-filter"
             );
-
           });
 
         button.classList.add(
@@ -654,50 +835,41 @@ document
         selectedFilter =
           button.dataset.filter;
 
-        updatePreview();
-
+        updateVideoPreview();
       }
     );
-
   });
 
 
-/* -----------------------------
+/* =====================================================
    MUTE
------------------------------ */
+===================================================== */
 
 muteBtn.addEventListener(
   "click",
   () => {
 
-    muted = !muted;
+    muted =
+      !muted;
 
     videoPreview.muted =
       muted;
 
-    if (muted) {
-
-      muteBtn.textContent =
-        "🔊 Unmute Video";
-
-    } else {
-
-      muteBtn.textContent =
-        "🔇 Mute Video";
-
-    }
-
+    muteBtn.textContent =
+      muted
+        ? "🔊 Unmute Video"
+        : "🔇 Mute Video";
   }
 );
 
 
-/* -----------------------------
+/* =====================================================
    TABS
------------------------------ */
+===================================================== */
 
 document
   .querySelectorAll(".tab")
-  .forEach((tab) => {
+  .forEach(tab => {
 
     tab.addEventListener(
       "click",
@@ -705,97 +877,418 @@ document
 
         document
           .querySelectorAll(".tab")
-          .forEach((t) => {
+          .forEach(t => {
 
             t.classList.remove(
               "active"
             );
-
           });
 
         document
-          .querySelectorAll(".tab-content")
-          .forEach((content) => {
+          .querySelectorAll(
+            ".tab-content"
+          )
+          .forEach(content => {
 
             content.classList.remove(
               "active"
             );
-
           });
 
-        tab.classList.add("active");
+        tab.classList.add(
+          "active"
+        );
 
         const id =
           tab.dataset.tab;
 
         const content =
-          document.getElementById(id);
+          $(id);
 
         if (content) {
+
           content.classList.add(
             "active"
           );
         }
-
       }
     );
-
   });
 
 
-/* -----------------------------
-   NEW PROJECT
------------------------------ */
+/* =====================================================
+   TEXT DESIGNER
+===================================================== */
 
-$("newProjectBtn").addEventListener(
-  "click",
+function updateTextPreview() {
+
+  const text =
+    overlayText.value ||
+    "आपका Text";
+
+  const size =
+    Number(textSize.value);
+
+  let weight =
+    "400";
+
+  let style =
+    "normal";
+
+  if (
+    fontStyle === "bold"
+  ) {
+
+    weight =
+      "700";
+  }
+
+  if (
+    fontStyle === "italic"
+  ) {
+
+    style =
+      "italic";
+  }
+
+  if (
+    fontStyle === "bolditalic"
+  ) {
+
+    weight =
+      "700";
+
+    style =
+      "italic";
+  }
+
+
+  /* Designer preview */
+
+  designerPreview.textContent =
+    text;
+
+  designerPreview.style.color =
+    textColor.value;
+
+  designerPreview.style.fontFamily =
+    fontFamily.value;
+
+  designerPreview.style.fontSize =
+    Math.min(
+      size,
+      72
+    ) + "px";
+
+  designerPreview.style.fontWeight =
+    weight;
+
+  designerPreview.style.fontStyle =
+    style;
+
+  designerPreview.style.textAlign =
+    textAlign;
+
+  if (
+    transparentBg.checked
+  ) {
+
+    designerPreview.style.background =
+      "transparent";
+
+  } else {
+
+    designerPreview.style.background =
+      textBgColor.value;
+  }
+
+
+  if (
+    textShadow.checked
+  ) {
+
+    designerPreview.style.textShadow =
+      "3px 3px 5px rgba(0,0,0,.8)";
+
+  } else {
+
+    designerPreview.style.textShadow =
+      "none";
+  }
+
+
+  /* Actual video preview */
+
+  liveText.textContent =
+    text;
+
+  liveText.style.color =
+    textColor.value;
+
+  liveText.style.fontFamily =
+    fontFamily.value;
+
+  /*
+    Video preview is displayed smaller than
+    the real video, so scale the font.
+  */
+
+  const previewSize =
+    Math.max(
+      12,
+      Math.min(
+        80,
+        size *
+        (
+          videoPreview.clientWidth /
+          Math.max(
+            videoPreview.videoWidth,
+            1
+          )
+        )
+      )
+    );
+
+  liveText.style.fontSize =
+    previewSize + "px";
+
+  liveText.style.fontWeight =
+    weight;
+
+  liveText.style.fontStyle =
+    style;
+
+  liveText.style.textAlign =
+    textAlign;
+
+  liveText.className =
+    "live-text";
+
+  liveText.classList.add(
+    textPosition.value
+  );
+
+
+  if (
+    transparentBg.checked
+  ) {
+
+    liveText.style.background =
+      "transparent";
+
+  } else {
+
+    liveText.style.background =
+      textBgColor.value;
+  }
+
+
+  if (
+    textShadow.checked
+  ) {
+
+    liveText.style.textShadow =
+      "3px 3px 5px rgba(0,0,0,.85)";
+
+  } else {
+
+    liveText.style.textShadow =
+      "none";
+  }
+
+
+  if (!overlayText.value) {
+
+    liveText.classList.add(
+      "hidden"
+    );
+  }
+}
+
+
+/* TEXT EVENTS */
+
+overlayText.addEventListener(
+  "input",
+  updateTextPreview
+);
+
+
+textColor.addEventListener(
+  "input",
+  updateTextPreview
+);
+
+
+textBgColor.addEventListener(
+  "input",
+  updateTextPreview
+);
+
+
+transparentBg.addEventListener(
+  "change",
+  updateTextPreview
+);
+
+
+textSize.addEventListener(
+  "input",
   () => {
 
-    if (outputURL) {
+    textSizeValue.textContent =
+      textSize.value + "px";
 
-      URL.revokeObjectURL(
-        outputURL
-      );
-
-      outputURL = null;
-
-    }
-
-    videoFile = null;
-
-    videoPreview.removeAttribute(
-      "src"
-    );
-
-    videoPreview.load();
-
-    editorSection.classList.add(
-      "hidden"
-    );
-
-    uploadSection.classList.remove(
-      "hidden"
-    );
-
-    downloadBox.classList.add(
-      "hidden"
-    );
-
-    progressBox.classList.add(
-      "hidden"
-    );
-
-    videoInput.value = "";
-
-    resetEditorValues();
-
+    updateTextPreview();
   }
 );
 
 
-/* -----------------------------
-   FFMPEG LOAD
------------------------------ */
+fontFamily.addEventListener(
+  "change",
+  updateTextPreview
+);
+
+
+textPosition.addEventListener(
+  "change",
+  updateTextPreview
+);
+
+
+textShadow.addEventListener(
+  "change",
+  updateTextPreview
+);
+
+
+/* FONT STYLE */
+
+document
+  .querySelectorAll(
+    ".font-style-btn"
+  )
+  .forEach(button => {
+
+    button.addEventListener(
+      "click",
+      () => {
+
+        document
+          .querySelectorAll(
+            ".font-style-btn"
+          )
+          .forEach(b => {
+
+            b.classList.remove(
+              "active-font-style"
+            );
+          });
+
+        button.classList.add(
+          "active-font-style"
+        );
+
+        fontStyle =
+          button.dataset.fontStyle;
+
+        updateTextPreview();
+      }
+    );
+  });
+
+
+/* ALIGNMENT */
+
+document
+  .querySelectorAll(
+    ".align-btn"
+  )
+  .forEach(button => {
+
+    button.addEventListener(
+      "click",
+      () => {
+
+        document
+          .querySelectorAll(
+            ".align-btn"
+          )
+          .forEach(b => {
+
+            b.classList.remove(
+              "active-align"
+            );
+          });
+
+        button.classList.add(
+          "active-align"
+        );
+
+        textAlign =
+          button.dataset.align;
+
+        updateTextPreview();
+      }
+    );
+  });
+
+
+/* =====================================================
+   NEW PROJECT
+===================================================== */
+
+$("newProjectBtn")
+  .addEventListener(
+    "click",
+    () => {
+
+      if (outputURL) {
+
+        URL.revokeObjectURL(
+          outputURL
+        );
+
+        outputURL =
+          null;
+      }
+
+      videoFile =
+        null;
+
+      videoPreview.removeAttribute(
+        "src"
+      );
+
+      videoPreview.load();
+
+      editorSection.classList.add(
+        "hidden"
+      );
+
+      uploadSection.classList.remove(
+        "hidden"
+      );
+
+      downloadBox.classList.add(
+        "hidden"
+      );
+
+      progressBox.classList.add(
+        "hidden"
+      );
+
+      videoInput.value =
+        "";
+
+      resetEditor();
+    }
+  );
+
+
+/* =====================================================
+   FFMPEG
+===================================================== */
 
 async function loadFFmpeg() {
 
@@ -809,32 +1302,36 @@ async function loadFFmpeg() {
   ) {
 
     throw new Error(
-      "FFmpeg library load नहीं हुई। Page को refresh करके फिर प्रयास करें।"
+      "FFmpeg library load नहीं हुई। Page refresh करके फिर प्रयास करें।"
     );
-
   }
+
 
   const {
     FFmpeg
-  } = window.FFmpegWASM;
+  } =
+    window.FFmpegWASM;
 
   const {
     toBlobURL
-  } = window.FFmpegUtil;
+  } =
+    window.FFmpegUtil;
+
 
   ffmpeg =
     new FFmpeg();
+
 
   ffmpeg.on(
     "progress",
     ({ progress }) => {
 
       const percent =
-        Math.max(
-          0,
-          Math.min(
-            100,
-            Math.round(
+        Math.round(
+          Math.max(
+            0,
+            Math.min(
+              100,
               progress * 100
             )
           )
@@ -842,9 +1339,8 @@ async function loadFFmpeg() {
 
       setProgress(
         percent,
-        `Video processing... ${percent}%`
+        `Processing... ${percent}%`
       );
-
     }
   );
 
@@ -857,7 +1353,6 @@ async function loadFFmpeg() {
         "[FFmpeg]",
         message
       );
-
     }
   );
 
@@ -885,23 +1380,23 @@ async function loadFFmpeg() {
         `${base}/ffmpeg-core.wasm`,
         "application/wasm"
       )
-
   });
 
 
-  ffmpegLoaded = true;
+  ffmpegLoaded =
+    true;
+
 
   setProgress(
     0,
     ""
   );
-
 }
 
 
-/* -----------------------------
+/* =====================================================
    PROGRESS
------------------------------ */
+===================================================== */
 
 function setProgress(
   percent,
@@ -919,18 +1414,19 @@ function setProgress(
     `${percent}%`;
 
   progressText.textContent =
-    message || "Processing...";
-
+    message ||
+    "Processing...";
 }
 
 
-/* -----------------------------
-   FILTER BUILD
------------------------------ */
+/* =====================================================
+   VIDEO FILTER
+===================================================== */
 
 function buildVideoFilter() {
 
   const filters = [];
+
 
   const b =
     Number(brightness.value);
@@ -951,20 +1447,22 @@ function buildVideoFilter() {
     filters.push(
       `eq=brightness=${b}:contrast=${c}:saturation=${s}`
     );
-
   }
 
 
-  if (selectedFilter === "gray") {
+  if (
+    selectedFilter === "gray"
+  ) {
 
     filters.push(
       "hue=s=0"
     );
-
   }
 
 
-  if (selectedFilter === "sepia") {
+  if (
+    selectedFilter === "sepia"
+  ) {
 
     filters.push(
       "colorchannelmixer=" +
@@ -972,16 +1470,16 @@ function buildVideoFilter() {
       "gr=.349:gg=.686:gb=.168:" +
       "br=.272:bg=.534:bb=.131"
     );
-
   }
 
 
-  if (selectedFilter === "vintage") {
+  if (
+    selectedFilter === "vintage"
+  ) {
 
     filters.push(
-      "eq=contrast=1.12:saturation=0.75"
+      "eq=contrast=1.12:saturation=.75"
     );
-
   }
 
 
@@ -991,23 +1489,18 @@ function buildVideoFilter() {
       "transpose=1"
     );
 
-  }
-
-  else if (rotate === 180) {
+  } else if (rotate === 180) {
 
     filters.push(
       "hflip",
       "vflip"
     );
 
-  }
-
-  else if (rotate === -90) {
+  } else if (rotate === -90) {
 
     filters.push(
       "transpose=2"
     );
-
   }
 
 
@@ -1016,7 +1509,6 @@ function buildVideoFilter() {
     filters.push(
       "hflip"
     );
-
   }
 
 
@@ -1025,36 +1517,417 @@ function buildVideoFilter() {
     filters.push(
       "vflip"
     );
-
   }
 
 
-  const res =
-    resolution.value;
-
-
-  if (res !== "original") {
-
-    const height =
-      Number(res);
-
-    filters.push(
-      `scale=-2:${height}`
-    );
-
-  }
-
-
-  return filters.join(",");
-
+  return filters;
 }
 
 
-/* -----------------------------
-   SPEED AUDIO FILTER
------------------------------ */
+/* =====================================================
+   RESOLUTION
+===================================================== */
 
-function buildAtempoFilter(value) {
+function getOutputSize() {
+
+  let width =
+    videoPreview.videoWidth;
+
+  let height =
+    videoPreview.videoHeight;
+
+
+  const selected =
+    resolution.value;
+
+
+  if (
+    selected !== "original"
+  ) {
+
+    const targetHeight =
+      Number(selected);
+
+    const ratio =
+      width / height;
+
+    height =
+      targetHeight;
+
+    width =
+      Math.round(
+        targetHeight * ratio
+      );
+
+    /*
+      H264 prefers even dimensions.
+    */
+
+    width =
+      width % 2 === 0
+        ? width
+        : width - 1;
+
+    height =
+      height % 2 === 0
+        ? height
+        : height - 1;
+  }
+
+
+  return {
+    width,
+    height
+  };
+}
+
+
+/* =====================================================
+   TEXT CANVAS
+===================================================== */
+
+async function createTextOverlay() {
+
+  const text =
+    overlayText.value.trim();
+
+
+  if (!text) {
+
+    return false;
+  }
+
+
+  const {
+    width,
+    height
+  } =
+    getOutputSize();
+
+
+  const canvas =
+    document.createElement(
+      "canvas"
+    );
+
+  canvas.width =
+    width;
+
+  canvas.height =
+    height;
+
+
+  const ctx =
+    canvas.getContext(
+      "2d"
+    );
+
+
+  ctx.clearRect(
+    0,
+    0,
+    width,
+    height
+  );
+
+
+  const size =
+    Number(textSize.value);
+
+
+  let weight =
+    "400";
+
+  let style =
+    "normal";
+
+
+  if (
+    fontStyle === "bold"
+  ) {
+
+    weight =
+      "700";
+  }
+
+
+  if (
+    fontStyle === "italic"
+  ) {
+
+    style =
+      "italic";
+  }
+
+
+  if (
+    fontStyle === "bolditalic"
+  ) {
+
+    weight =
+      "700";
+
+    style =
+      "italic";
+  }
+
+
+  ctx.font =
+    `${style} ${weight} ${size}px "${fontFamily.value}"`;
+
+
+  ctx.fillStyle =
+    textColor.value;
+
+
+  ctx.textAlign =
+    textAlign;
+
+
+  ctx.textBaseline =
+    "middle";
+
+
+  /*
+    Convert alignment into X coordinate.
+  */
+
+  let x =
+    width / 2;
+
+  if (
+    textAlign === "left"
+  ) {
+
+    x =
+      width * 0.05;
+
+  } else if (
+    textAlign === "right"
+  ) {
+
+    x =
+      width * 0.95;
+  }
+
+
+  let y;
+
+  if (
+    textPosition.value === "top"
+  ) {
+
+    y =
+      height * 0.12;
+
+  } else if (
+    textPosition.value === "bottom"
+  ) {
+
+    y =
+      height * 0.88;
+
+  } else {
+
+    y =
+      height * 0.50;
+  }
+
+
+  /*
+    Multi-line text.
+  */
+
+  const lines =
+    text.split("\n");
+
+
+  const lineHeight =
+    size * 1.2;
+
+
+  const totalHeight =
+    lines.length *
+    lineHeight;
+
+
+  let startY =
+    y -
+    totalHeight / 2 +
+    lineHeight / 2;
+
+
+  /*
+    Background box.
+  */
+
+  if (
+    !transparentBg.checked
+  ) {
+
+    let maxWidth =
+      0;
+
+    for (
+      const line of lines
+    ) {
+
+      const metrics =
+        ctx.measureText(line);
+
+      maxWidth =
+        Math.max(
+          maxWidth,
+          metrics.width
+        );
+    }
+
+
+    const padding =
+      size * 0.35;
+
+
+    let boxX =
+      x -
+      maxWidth / 2 -
+      padding;
+
+
+    if (
+      textAlign === "left"
+    ) {
+
+      boxX =
+        x -
+        padding;
+
+    } else if (
+      textAlign === "right"
+    ) {
+
+      boxX =
+        x -
+        maxWidth -
+        padding;
+    }
+
+
+    const boxY =
+      startY -
+      lineHeight / 2 -
+      padding;
+
+
+    const boxW =
+      maxWidth +
+      padding * 2;
+
+
+    const boxH =
+      totalHeight +
+      padding * 2;
+
+
+    ctx.fillStyle =
+      textBgColor.value;
+
+
+    ctx.fillRect(
+      boxX,
+      boxY,
+      boxW,
+      boxH
+    );
+  }
+
+
+  /*
+    Shadow
+  */
+
+  if (
+    textShadow.checked
+  ) {
+
+    ctx.shadowColor =
+      "rgba(0,0,0,.85)";
+
+    ctx.shadowBlur =
+      Math.max(
+        3,
+        size * .08
+      );
+
+    ctx.shadowOffsetX =
+      size * .04;
+
+    ctx.shadowOffsetY =
+      size * .04;
+  }
+
+
+  ctx.fillStyle =
+    textColor.value;
+
+
+  for (
+    const line of lines
+  ) {
+
+    ctx.fillText(
+      line,
+      x,
+      startY
+    );
+
+    startY +=
+      lineHeight;
+  }
+
+
+  /*
+    Convert canvas to PNG.
+  */
+
+  const blob =
+    await new Promise(
+      resolve =>
+        canvas.toBlob(
+          resolve,
+          "image/png"
+        )
+    );
+
+
+  if (!blob) {
+
+    throw new Error(
+      "Text overlay image नहीं बन सकी।"
+    );
+  }
+
+
+  const {
+    fetchFile
+  } =
+    window.FFmpegUtil;
+
+
+  await ffmpeg.writeFile(
+    "text-overlay.png",
+    await fetchFile(blob)
+  );
+
+
+  return true;
+}
+
+
+/* =====================================================
+   ATEMPO
+===================================================== */
+
+function buildAtempo(value) {
 
   const speedValue =
     Number(value);
@@ -1065,25 +1938,27 @@ function buildAtempoFilter(value) {
     speedValue;
 
 
-  while (remaining > 2) {
+  while (
+    remaining > 2
+  ) {
 
     filters.push(
       "atempo=2"
     );
 
     remaining /= 2;
-
   }
 
 
-  while (remaining < 0.5) {
+  while (
+    remaining < .5
+  ) {
 
     filters.push(
-      "atempo=0.5"
+      "atempo=.5"
     );
 
-    remaining /= 0.5;
-
+    remaining /= .5;
   }
 
 
@@ -1091,14 +1966,14 @@ function buildAtempoFilter(value) {
     `atempo=${remaining}`
   );
 
-  return filters.join(",");
 
+  return filters.join(",");
 }
 
 
-/* -----------------------------
+/* =====================================================
    EXPORT
------------------------------ */
+===================================================== */
 
 exportBtn.addEventListener(
   "click",
@@ -1115,7 +1990,6 @@ async function exportVideo() {
     );
 
     return;
-
   }
 
 
@@ -1134,11 +2008,10 @@ async function exportVideo() {
   ) {
 
     alert(
-      "वीडियो की duration नहीं मिली।"
+      "वीडियो duration नहीं मिली।"
     );
 
     return;
-
   }
 
 
@@ -1149,15 +2022,15 @@ async function exportVideo() {
   ) {
 
     alert(
-      "Start और End time सही चुनें।"
+      "Start और End time सही करें।"
     );
 
     return;
-
   }
 
 
-  exportBtn.disabled = true;
+  exportBtn.disabled =
+    true;
 
   downloadBox.classList.add(
     "hidden"
@@ -1169,15 +2042,10 @@ async function exportVideo() {
     await loadFFmpeg();
 
 
-    setProgress(
-      10,
-      "Video file तैयार हो रही है..."
-    );
-
-
     const {
       fetchFile
-    } = window.FFmpegUtil;
+    } =
+    window.FFmpegUtil;
 
 
     const inputName =
@@ -1187,51 +2055,70 @@ async function exportVideo() {
       "edited-video.mp4";
 
 
+    setProgress(
+      10,
+      "Video file loading..."
+    );
+
+
     await ffmpeg.writeFile(
       inputName,
       await fetchFile(videoFile)
     );
 
 
-    const args = [];
+    /*
+      Create text PNG if text exists.
+    */
+
+    let hasText =
+      false;
 
 
-    /* Trim */
+    if (
+      overlayText.value.trim()
+    ) {
 
-    args.push(
-      "-ss",
-      String(start)
-    );
-
-    args.push(
-      "-i",
-      inputName
-    );
-
-
-    args.push(
-      "-t",
-      String(end - start)
-    );
-
-
-    /* Video filter */
-
-    const vf =
-      buildVideoFilter();
-
-
-    if (vf) {
-
-      args.push(
-        "-vf",
-        vf
+      setProgress(
+        15,
+        "Text design तैयार हो रहा है..."
       );
 
+      hasText =
+        await createTextOverlay();
     }
 
 
-    /* Speed */
+    const videoFilters =
+      buildVideoFilter();
+
+
+    /*
+      Resolution is handled by the
+      normal video filter.
+    */
+
+    const {
+      width,
+      height
+    } =
+      getOutputSize();
+
+
+    if (
+      resolution.value !==
+      "original"
+    ) {
+
+      videoFilters.push(
+        `scale=${width}:${height}`
+      );
+    }
+
+
+    /*
+      Speed changes video PTS.
+    */
 
     const speedValue =
       Number(speed.value);
@@ -1241,115 +2128,196 @@ async function exportVideo() {
       speedValue !== 1
     ) {
 
-      /*
-        Video speed
-      */
-
-      const currentVF =
-        vf
-          ? vf + ","
-          : "";
-
-      args.splice(
-        args.indexOf("-vf"),
-        args.indexOf("-vf") >= 0
-          ? 2
-          : 0
-      );
-
-
-      const speedVideo =
+      videoFilters.push(
         `setpts=${(
           1 / speedValue
-        ).toFixed(6)}*PTS`;
-
-
-      const finalVF =
-        currentVF +
-        speedVideo;
-
-
-      args.push(
-        "-vf",
-        finalVF
+        ).toFixed(6)}*PTS`
       );
-
     }
 
 
-    /* Audio */
+    /*
+      TEXT OVERLAY
 
-    if (muted) {
+      We use FFmpeg's second input
+      for the transparent PNG.
+    */
+
+    const args = [];
+
+
+    args.push(
+      "-ss",
+      String(start)
+    );
+
+
+    args.push(
+      "-i",
+      inputName
+    );
+
+
+    if (hasText) {
 
       args.push(
-        "-an"
+        "-i",
+        "text-overlay.png"
       );
+    }
 
-    } else {
+
+    args.push(
+      "-t",
+      String(end - start)
+    );
+
+
+    /*
+      Audio
+    */
+
+    const audioFilters = [];
+
+
+    if (!muted) {
+
+      const vol =
+        Number(volume.value);
+
 
       if (
-        Number(volume.value) !== 1 ||
+        vol !== 1
+      ) {
+
+        audioFilters.push(
+          `volume=${vol}`
+        );
+      }
+
+
+      if (
         speedValue !== 1
       ) {
 
-        const audioFilters = [];
-
-
-        const volumeValueNumber =
-          Number(volume.value);
-
-
-        if (
-          volumeValueNumber !== 1
-        ) {
-
-          audioFilters.push(
-            `volume=${volumeValueNumber}`
-          );
-
-        }
-
-
-        if (
-          speedValue !== 1
-        ) {
-
-          audioFilters.push(
-            buildAtempoFilter(
-              speedValue
-            )
-          );
-
-        }
-
-
-        if (
-          audioFilters.length
-        ) {
-
-          args.push(
-            "-af",
-            audioFilters.join(",")
-          );
-
-        }
-
+        audioFilters.push(
+          buildAtempo(
+            speedValue
+          )
+        );
       }
-
     }
 
 
-    /* Video codec */
+    /*
+      Build complex video filter
+      when text is present.
+    */
+
+    if (hasText) {
+
+      let baseVideo =
+        "[0:v]";
+
+
+      if (
+        videoFilters.length
+      ) {
+
+        args.push(
+          "-filter_complex",
+          `${baseVideo}${videoFilters.join(",")}[v0];` +
+          `[v0][1:v]overlay=0:0:format=auto[vout]`
+        );
+
+      } else {
+
+        args.push(
+          "-filter_complex",
+          `[0:v][1:v]overlay=0:0:format=auto[vout]`
+        );
+      }
+
+
+      args.push(
+        "-map",
+        "[vout]"
+      );
+
+
+      if (!muted) {
+
+        args.push(
+          "-map",
+          "0:a?"
+        );
+      }
+
+
+    } else {
+
+      /*
+        Normal video filter.
+      */
+
+      if (
+        videoFilters.length
+      ) {
+
+        args.push(
+          "-vf",
+          videoFilters.join(",")
+        );
+      }
+
+
+      args.push(
+        "-map",
+        "0:v:0"
+      );
+
+
+      if (!muted) {
+
+        args.push(
+          "-map",
+          "0:a?"
+        );
+      }
+    }
+
+
+    /*
+      Audio filter
+    */
+
+    if (
+      !muted &&
+      audioFilters.length
+    ) {
+
+      args.push(
+        "-af",
+        audioFilters.join(",")
+      );
+    }
+
+
+    /*
+      Video encoder
+    */
 
     args.push(
       "-c:v",
       "libx264"
     );
 
+
     args.push(
       "-preset",
       "ultrafast"
     );
+
 
     args.push(
       "-crf",
@@ -1357,7 +2325,9 @@ async function exportVideo() {
     );
 
 
-    /* Audio codec */
+    /*
+      Audio
+    */
 
     if (!muted) {
 
@@ -1370,7 +2340,6 @@ async function exportVideo() {
         "-b:a",
         "128k"
       );
-
     }
 
 
@@ -1381,20 +2350,25 @@ async function exportVideo() {
 
 
     args.push(
-      "-y",
-      outputName
+      "-shortest"
     );
 
 
-    setProgress(
-      15,
-      "Video editing शुरू..."
+    args.push(
+      "-y",
+      outputName
     );
 
 
     console.log(
       "FFmpeg command:",
       args
+    );
+
+
+    setProgress(
+      20,
+      "Video editing शुरू..."
     );
 
 
@@ -1405,7 +2379,7 @@ async function exportVideo() {
 
     setProgress(
       95,
-      "Edited video तैयार हो रहा है..."
+      "Final video तैयार हो रहा है..."
     );
 
 
@@ -1430,7 +2404,6 @@ async function exportVideo() {
       URL.revokeObjectURL(
         outputURL
       );
-
     }
 
 
@@ -1461,31 +2434,29 @@ async function exportVideo() {
     );
 
 
-    /* automatically scroll */
-
     downloadBox.scrollIntoView({
-      behavior: "smooth",
-      block: "center"
+      behavior:
+        "smooth",
+      block:
+        "center"
     });
 
 
-  }
-
-  catch (error) {
+  } catch (error) {
 
     console.error(
-      "Export Error:",
+      "EXPORT ERROR:",
       error
     );
 
 
     alert(
-      "Video export नहीं हो सका। Browser console में error देखें।\n\n" +
+      "Video export नहीं हो सका।\n\n" +
       (
         error &&
         error.message
           ? error.message
-          : error
+          : String(error)
       )
     );
 
@@ -1495,20 +2466,18 @@ async function exportVideo() {
       "Export failed"
     );
 
+
+  } finally {
+
+    exportBtn.disabled =
+      false;
   }
-
-  finally {
-
-    exportBtn.disabled = false;
-
-  }
-
 }
 
 
-/* -----------------------------
+/* =====================================================
    DOWNLOAD NAME
------------------------------ */
+===================================================== */
 
 function createDownloadName(
   original
@@ -1525,40 +2494,17 @@ function createDownloadName(
         "-"
       );
 
+
   return (
     clean +
     "-edited.mp4"
   );
-
 }
 
 
-/* -----------------------------
-   TEXT PREVIEW
------------------------------ */
-
-overlayText.addEventListener(
-  "input",
-  () => {
-
-    /*
-      Live browser preview only.
-      Actual text rendering can be added
-      with a bundled font in the next stage.
-    */
-
-    console.log(
-      "Overlay text:",
-      overlayText.value
-    );
-
-  }
-);
-
-
-/* -----------------------------
-   INITIAL STATE
------------------------------ */
+/* =====================================================
+   INITIAL
+===================================================== */
 
 videoPreview.addEventListener(
   "loadedmetadata",
@@ -1570,5 +2516,6 @@ videoPreview.addEventListener(
     videoPreview.playbackRate =
       Number(speed.value);
 
+    updateTextPreview();
   }
 );
