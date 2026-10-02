@@ -1,14 +1,29 @@
 "use strict";
 
 /*
-========================================================
- AI VIDEO EDITOR - PROFESSIONAL BROWSER EDITOR
-========================================================
+  AI VIDEO EDITOR
+  Professional browser based editor
+
+  Features:
+  - Video upload
+  - Trim
+  - Rotate
+  - Flip
+  - Filters
+  - Text
+  - Animated text
+  - Photo/video overlay
+  - Frames
+  - Templates
+  - Background music
+  - WebM export
+  - MP4 conversion through FFmpeg when available
 */
 
-/* -----------------------------------------------------
-   FFmpeg Worker cross-origin protection
------------------------------------------------------ */
+
+/* =========================================================
+   CROSS ORIGIN WORKER FIX
+========================================================= */
 
 const NativeWorker = window.Worker;
 
@@ -18,10 +33,7 @@ window.Worker = function (scriptURL, options) {
 
   if (
     url.includes("cdn.jsdelivr.net") &&
-    (
-      url.includes("ffmpeg.js") ||
-      url.includes("814.ffmpeg.js")
-    )
+    url.includes("814.ffmpeg.js")
   ) {
 
     const workerCode = `
@@ -30,7 +42,9 @@ window.Worker = function (scriptURL, options) {
 
     const blob = new Blob(
       [workerCode],
-      { type: "text/javascript" }
+      {
+        type: "text/javascript"
+      }
     );
 
     const blobURL =
@@ -52,71 +66,72 @@ window.Worker.prototype =
   NativeWorker.prototype;
 
 
-/* -----------------------------------------------------
-   Helpers
------------------------------------------------------ */
+/* =========================================================
+   DOM HELPERS
+========================================================= */
 
 const $ = id =>
   document.getElementById(id);
 
-const qs = selector =>
-  document.querySelector(selector);
+const video =
+  $("video");
 
-const qsa = selector =>
-  [...document.querySelectorAll(selector)];
+const canvas =
+  $("previewCanvas");
+
+const ctx =
+  canvas.getContext("2d");
+
+const textPreview =
+  $("textPreview");
+
+const previewArea =
+  $("previewArea");
+
+const progressBar =
+  $("progressBar");
+
+const progressText =
+  $("progressText");
+
+const downloadBox =
+  $("downloadBox");
 
 
-/* -----------------------------------------------------
-   Main state
------------------------------------------------------ */
+/* =========================================================
+   STATE
+========================================================= */
+
+let videoFile = null;
+let musicFile = null;
+let overlayFile = null;
+
+let overlayURL = null;
+
+let overlayMedia = null;
+
+let animationFrame = null;
+
+let selectedFrame = "none";
+
+let selectedTemplate = "none";
+
+let audioContext = null;
+
+let mediaDestination = null;
+
+let sourceNode = null;
+
+let musicSourceNode = null;
+
+let currentExportURL = null;
+
+
+/* =========================================================
+   SETTINGS
+========================================================= */
 
 const state = {
-
-  videoFile: null,
-
-  videoURL: null,
-
-  overlayFile: null,
-
-  overlayURL: null,
-
-  overlayType: null,
-
-  filter: "none",
-
-  frame: "none",
-
-  template: "clean",
-
-  text: "",
-
-  textAnimation: "none",
-
-  textSize: 60,
-
-  textColor: "#ffffff",
-
-  textBg: "#000000",
-
-  textFont: "Arial",
-
-  textStyle: "normal",
-
-  textPosition: "middle",
-
-  textAlign: "center",
-
-  textShadow: true,
-
-  textBackground: false,
-
-  animationSpeed: 5,
-
-  overlaySize: 35,
-
-  overlayX: "center",
-
-  overlayY: "center",
 
   brightness: 100,
 
@@ -124,812 +139,111 @@ const state = {
 
   saturation: 100,
 
-  rotate: 0,
-
-  flip: "none",
+  filter: "none",
 
   volume: 100,
 
   mute: false,
 
-  speed: 1
+  speed: 1,
+
+  rotate: 0,
+
+  flip: "none",
+
+  resolution: "original",
+
+  text: "",
+
+  textColor: "#ffffff",
+
+  textBg: "#000000",
+
+  transparentBg: false,
+
+  fontSize: 64,
+
+  fontFamily: "Arial",
+
+  fontStyle: "normal",
+
+  textAlign: "center",
+
+  textPosition: "middle",
+
+  textShadow: true,
+
+  textAnimation: "none",
+
+  animationSpeed: 1,
+
+  overlayScale: 0.5,
+
+  overlayX: 50,
+
+  overlayY: 50
 
 };
 
 
-/* -----------------------------------------------------
-   DOM
------------------------------------------------------ */
-
-const video =
-  $("video");
-
-const previewArea =
-  $("previewArea");
-
-const previewCanvas =
-  $("previewCanvas");
-
-const emptyPreview =
-  $("emptyPreview");
-
-const videoInput =
-  $("videoInput");
-
-const videoInputSide =
-  $("videoInputSide");
-
-const overlayInput =
-  $("overlayInput");
-
-const textInput =
-  $("textInput");
-
-const textColor =
-  $("textColor");
-
-const textBg =
-  $("textBg");
-
-const textFont =
-  $("textFont");
-
-const textStyle =
-  $("textStyle");
-
-const textSize =
-  $("textSize");
-
-const textPosition =
-  $("textPosition");
-
-const textAlign =
-  $("textAlign");
-
-const textAnimation =
-  $("textAnimation");
-
-const animationSpeed =
-  $("animationSpeed");
-
-const textShadow =
-  $("textShadow");
-
-const textBackground =
-  $("textBackground");
-
-const overlaySize =
-  $("overlaySize");
-
-const overlayX =
-  $("overlayX");
-
-const overlayY =
-  $("overlayY");
-
-const brightness =
-  $("brightness");
-
-const contrast =
-  $("contrast");
-
-const saturation =
-  $("saturation");
-
-const rotate =
-  $("rotate");
-
-const flip =
-  $("flip");
-
-const volume =
-  $("volume");
-
-const mute =
-  $("mute");
-
-const speed =
-  $("speed");
-
-const resolution =
-  $("resolution");
-
-const seek =
-  $("seek");
-
-const startTime =
-  $("startTime");
-
-const endTime =
-  $("endTime");
-
-
-/* -----------------------------------------------------
-   Utility
------------------------------------------------------ */
-
-function formatTime(seconds) {
-
-  seconds =
-    Math.max(
-      0,
-      Number(seconds) || 0
-    );
-
-  const m =
-    Math.floor(seconds / 60);
-
-  const s =
-    Math.floor(seconds % 60);
-
-  return (
-    String(m).padStart(2, "0") +
-    ":" +
-    String(s).padStart(2, "0")
-  );
-}
-
-
-function clamp(value, min, max) {
-
-  return Math.min(
-    max,
-    Math.max(min, value)
-  );
-
-}
-
-
-function setProgress(percent, text) {
-
-  $("progressBox")
-    .classList
-    .remove("hidden");
-
-  $("progressBar").style.width =
-    `${clamp(percent, 0, 100)}%`;
-
-  $("progressText").textContent =
-    text || `${Math.round(percent)}%`;
-
-}
-
-
-function loading(show, text) {
-
-  $("loading")
-    .classList
-    .toggle("hidden", !show);
-
-  if (text) {
-
-    $("loadingText")
-      .textContent = text;
-
-  }
-
-}
-
-
-/* -----------------------------------------------------
-   Video upload
------------------------------------------------------ */
-
-function loadVideoFile(file) {
-
-  if (!file) return;
-
-  if (!file.type.startsWith("video/")) {
-
-    alert("कृपया video file चुनें।");
-
-    return;
-  }
-
-  state.videoFile = file;
-
-  if (state.videoURL) {
-
-    URL.revokeObjectURL(
-      state.videoURL
-    );
-
-  }
-
-  state.videoURL =
-    URL.createObjectURL(file);
-
-  video.src =
-    state.videoURL;
-
-  video.load();
-
-  video.style.visibility =
-    "visible";
-
-  emptyPreview
-    .classList
-    .add("hidden");
-
-  $("videoStatus")
-    .textContent =
-    file.name;
-
-  video.onloadedmetadata =
-    () => {
-
-      startTime.max =
-        video.duration;
-
-      endTime.max =
-        video.duration;
-
-      endTime.value =
-        video.duration.toFixed(1);
-
-      $("duration")
-        .textContent =
-        formatTime(video.duration);
-
-      seek.max =
-        video.duration;
-
-      seek.value = 0;
-
-      renderPreview();
-
-    };
-
-}
-
-
-/* -----------------------------------------------------
-   Input events
------------------------------------------------------ */
-
-videoInput.addEventListener(
-  "change",
-  e => loadVideoFile(
-    e.target.files[0]
-  )
-);
-
-videoInputSide.addEventListener(
-  "change",
-  e => loadVideoFile(
-    e.target.files[0]
-  )
-);
-
-
-/* Drag & Drop */
-
-previewArea.addEventListener(
-  "dragover",
-  e => {
-
-    e.preventDefault();
-
-  }
-);
-
-previewArea.addEventListener(
-  "drop",
-  e => {
-
-    e.preventDefault();
-
-    const file =
-      e.dataTransfer.files[0];
-
-    loadVideoFile(file);
-
-  }
-);
-
-
-/* -----------------------------------------------------
-   Overlay media
------------------------------------------------------ */
-
-overlayInput.addEventListener(
+/* =========================================================
+   VIDEO UPLOAD
+========================================================= */
+
+$("videoInput").addEventListener(
   "change",
   e => {
 
     const file =
       e.target.files[0];
 
-    if (!file) return;
-
-    state.overlayFile =
-      file;
-
-    if (state.overlayURL) {
-
-      URL.revokeObjectURL(
-        state.overlayURL
-      );
-
+    if (file) {
+      loadVideo(file);
     }
 
-    state.overlayURL =
-      URL.createObjectURL(file);
+  }
+);
 
-    state.overlayType =
-      file.type.startsWith("video/")
-        ? "video"
-        : "image";
 
-    renderPreview();
+$("dropZone").addEventListener(
+  "dragover",
+  e => {
+
+    e.preventDefault();
+
+    $("dropZone").classList.add("drag");
 
   }
 );
 
 
-/* -----------------------------------------------------
-   Tabs
------------------------------------------------------ */
-
-qsa(".tab").forEach(
-  tab => {
-
-    tab.addEventListener(
-      "click",
-      () => {
-
-        qsa(".tab")
-          .forEach(
-            t =>
-              t.classList.remove(
-                "active"
-              )
-          );
-
-        qsa(".tab-content")
-          .forEach(
-            c =>
-              c.classList.remove(
-                "active"
-              )
-          );
-
-        tab.classList.add(
-          "active"
-        );
-
-        $(
-          "tab-" +
-          tab.dataset.tab
-        )
-          .classList
-          .add("active");
-
-      }
-    );
-
-  }
-);
-
-
-/* -----------------------------------------------------
-   Basic settings
------------------------------------------------------ */
-
-rotate.addEventListener(
-  "change",
+$("dropZone").addEventListener(
+  "dragleave",
   () => {
 
-    state.rotate =
-      Number(rotate.value);
-
-    renderPreview();
-
-  }
-);
-
-flip.addEventListener(
-  "change",
-  () => {
-
-    state.flip =
-      flip.value;
-
-    renderPreview();
+    $("dropZone").classList.remove("drag");
 
   }
 );
 
 
-/* -----------------------------------------------------
-   Look settings
------------------------------------------------------ */
+$("dropZone").addEventListener(
+  "drop",
+  e => {
 
-function updateLook() {
+    e.preventDefault();
 
-  state.brightness =
-    Number(brightness.value);
+    $("dropZone").classList.remove("drag");
 
-  state.contrast =
-    Number(contrast.value);
-
-  state.saturation =
-    Number(saturation.value);
-
-  $("brightnessValue")
-    .textContent =
-    state.brightness;
-
-  $("contrastValue")
-    .textContent =
-    state.contrast;
-
-  $("saturationValue")
-    .textContent =
-    state.saturation;
-
-  renderPreview();
-
-}
-
-
-brightness.addEventListener(
-  "input",
-  updateLook
-);
-
-contrast.addEventListener(
-  "input",
-  updateLook
-);
-
-saturation.addEventListener(
-  "input",
-  updateLook
-);
-
-
-/* -----------------------------------------------------
-   Filters
------------------------------------------------------ */
-
-qsa("[data-filter]")
-  .forEach(
-    button => {
-
-      button.addEventListener(
-        "click",
-        () => {
-
-          state.filter =
-            button.dataset.filter;
-
-          qsa("[data-filter]")
-            .forEach(
-              b =>
-                b.classList.remove(
-                  "active"
-                )
-            );
-
-          button.classList.add(
-            "active"
-          );
-
-          $("settingFilter")
-            .textContent =
-            button.textContent.trim();
-
-          renderPreview();
-
-        }
-      );
-
-    }
-  );
-
-
-/* -----------------------------------------------------
-   Text settings
------------------------------------------------------ */
-
-function updateTextState() {
-
-  state.text =
-    textInput.value;
-
-  state.textColor =
-    textColor.value;
-
-  state.textBg =
-    textBg.value;
-
-  state.textFont =
-    textFont.value;
-
-  state.textStyle =
-    textStyle.value;
-
-  state.textSize =
-    Number(textSize.value);
-
-  state.textPosition =
-    textPosition.value;
-
-  state.textAlign =
-    textAlign.value;
-
-  state.textAnimation =
-    textAnimation.value;
-
-  state.animationSpeed =
-    Number(animationSpeed.value);
-
-  state.textShadow =
-    textShadow.checked;
-
-  state.textBackground =
-    textBackground.checked;
-
-  $("textSizeValue")
-    .textContent =
-    state.textSize;
-
-  $("animationSpeedValue")
-    .textContent =
-    state.animationSpeed;
-
-  $("settingText")
-    .textContent =
-    state.text
-      ? state.text.substring(0, 18)
-      : "None";
-
-  renderPreview();
-
-}
-
-
-[
-  textInput,
-  textColor,
-  textBg,
-  textFont,
-  textStyle,
-  textSize,
-  textPosition,
-  textAlign,
-  textAnimation,
-  animationSpeed,
-  textShadow,
-  textBackground
-]
-.forEach(
-  element => {
-
-    element.addEventListener(
-      "input",
-      updateTextState
-    );
-
-    element.addEventListener(
-      "change",
-      updateTextState
-    );
-
-  }
-);
-
-
-/* -----------------------------------------------------
-   Frame
------------------------------------------------------ */
-
-qsa("[data-frame]")
-  .forEach(
-    button => {
-
-      button.addEventListener(
-        "click",
-        () => {
-
-          state.frame =
-            button.dataset.frame;
-
-          qsa("[data-frame]")
-            .forEach(
-              b =>
-                b.classList.remove(
-                  "active"
-                )
-            );
-
-          button.classList.add(
-            "active"
-          );
-
-          $("settingFrame")
-            .textContent =
-            button.textContent.trim();
-
-          renderPreview();
-
-        }
-      );
-
-    }
-  );
-
-
-overlaySize.addEventListener(
-  "input",
-  () => {
-
-    state.overlaySize =
-      Number(overlaySize.value);
-
-    $("overlaySizeValue")
-      .textContent =
-      state.overlaySize;
-
-    renderPreview();
-
-  }
-);
-
-
-overlayX.addEventListener(
-  "change",
-  () => {
-
-    state.overlayX =
-      overlayX.value;
-
-    renderPreview();
-
-  }
-);
-
-
-overlayY.addEventListener(
-  "change",
-  () => {
-
-    state.overlayY =
-      overlayY.value;
-
-    renderPreview();
-
-  }
-);
-
-
-/* -----------------------------------------------------
-   Audio
------------------------------------------------------ */
-
-volume.addEventListener(
-  "input",
-  () => {
-
-    state.volume =
-      Number(volume.value);
-
-    $("volumeValue")
-      .textContent =
-      state.volume;
-
-    video.volume =
-      state.volume / 100;
-
-  }
-);
-
-
-mute.addEventListener(
-  "change",
-  () => {
-
-    state.mute =
-      mute.checked;
-
-    video.muted =
-      state.mute;
-
-  }
-);
-
-
-speed.addEventListener(
-  "change",
-  () => {
-
-    state.speed =
-      Number(speed.value);
-
-    video.playbackRate =
-      state.speed;
-
-    $("settingSpeed")
-      .textContent =
-      `${state.speed}x`;
-
-  }
-);
-
-
-/* -----------------------------------------------------
-   Video controls
------------------------------------------------------ */
-
-$("playBtn").addEventListener(
-  "click",
-  () => {
-
-    if (!state.videoFile) return;
-
-    video.play();
-
-  }
-);
-
-
-$("pauseBtn").addEventListener(
-  "click",
-  () => video.pause()
-);
-
-
-video.addEventListener(
-  "timeupdate",
-  () => {
-
-    $("currentTime")
-      .textContent =
-      formatTime(video.currentTime);
-
-    seek.value =
-      video.currentTime;
-
-    renderPreview();
-
-  }
-);
-
-
-seek.addEventListener(
-  "input",
-  () => {
-
-    video.currentTime =
-      Number(seek.value);
-
-    renderPreview();
-
-  }
-);
-
-
-startTime.addEventListener(
-  "change",
-  () => {
-
-    const value =
-      clamp(
-        Number(startTime.value),
-        0,
-        video.duration || 0
-      );
-
-    startTime.value =
-      value;
+    const file =
+      e.dataTransfer.files[0];
 
     if (
-      video.currentTime <
-      value
+      file &&
+      file.type.startsWith("video/")
     ) {
 
-      video.currentTime =
-        value;
+      loadVideo(file);
 
     }
 
@@ -937,89 +251,39 @@ startTime.addEventListener(
 );
 
 
-endTime.addEventListener(
-  "change",
-  () => {
+function loadVideo(file) {
 
-    const value =
-      clamp(
-        Number(endTime.value),
-        0,
-        video.duration || 0
-      );
+  videoFile = file;
 
-    endTime.value =
-      value;
+  const url =
+    URL.createObjectURL(file);
 
-  }
-);
+  video.src = url;
 
+  video.load();
 
-/* -----------------------------------------------------
-   Preview canvas
------------------------------------------------------ */
+  video.onloadedmetadata = () => {
 
-function getFilterCSS() {
+    $("endTime").value =
+      video.duration.toFixed(1);
 
-  let brightnessValue =
-    state.brightness / 100;
+    $("duration").textContent =
+      formatTime(video.duration);
 
-  let contrastValue =
-    state.contrast / 100;
+    setupCanvas();
 
-  let saturationValue =
-    state.saturation / 100;
+    renderPreview();
 
-  let filter =
-    `
-      brightness(${brightnessValue})
-      contrast(${contrastValue})
-      saturate(${saturationValue})
-    `;
-
-  if (state.filter === "grayscale") {
-
-    filter +=
-      " grayscale(1)";
-
-  }
-
-  if (state.filter === "sepia") {
-
-    filter +=
-      " sepia(.8)";
-
-  }
-
-  if (state.filter === "vintage") {
-
-    filter +=
-      " sepia(.35) contrast(1.08) saturate(.8)";
-
-  }
-
-  if (state.filter === "cinematic") {
-
-    filter +=
-      " contrast(1.18) saturate(1.1)";
-
-  }
-
-  if (state.filter === "cool") {
-
-    filter +=
-      " saturate(.9) hue-rotate(10deg)";
-
-  }
-
-  return filter;
+  };
 
 }
 
 
-function renderPreview() {
+/* =========================================================
+   CANVAS
+========================================================= */
 
-  if (!state.videoFile) return;
+function setupCanvas() {
 
   const width =
     video.videoWidth || 1280;
@@ -1027,1062 +291,435 @@ function renderPreview() {
   const height =
     video.videoHeight || 720;
 
-  previewCanvas.width =
+  canvas.width =
     width;
 
-  previewCanvas.height =
+  canvas.height =
     height;
 
-  const ctx =
-    previewCanvas.getContext(
-      "2d"
+}
+
+
+function resizeCanvasForResolution() {
+
+  let width =
+    video.videoWidth || 1280;
+
+  let height =
+    video.videoHeight || 720;
+
+  if (state.resolution === "1080") {
+
+    const scale =
+      1080 / height;
+
+    width =
+      Math.round(width * scale);
+
+    height = 1080;
+
+  }
+
+  if (state.resolution === "720") {
+
+    const scale =
+      720 / height;
+
+    width =
+      Math.round(width * scale);
+
+    height = 720;
+
+  }
+
+  if (state.resolution === "480") {
+
+    const scale =
+      480 / height;
+
+    width =
+      Math.round(width * scale);
+
+    height = 480;
+
+  }
+
+  canvas.width =
+    width;
+
+  canvas.height =
+    height;
+
+}
+
+
+/* =========================================================
+   FILTER
+========================================================= */
+
+function getFilter() {
+
+  let filters = [
+
+    `brightness(${state.brightness}%)`,
+
+    `contrast(${state.contrast}%)`,
+
+    `saturate(${state.saturation}%)`
+
+  ];
+
+  if (
+    state.filter === "grayscale"
+  ) {
+
+    filters.push(
+      "grayscale(100%)"
     );
+
+  }
+
+  if (
+    state.filter === "sepia"
+  ) {
+
+    filters.push(
+      "sepia(100%)"
+    );
+
+  }
+
+  if (
+    state.filter === "vintage"
+  ) {
+
+    filters.push(
+      "sepia(35%) contrast(115%) saturate(80%)"
+    );
+
+  }
+
+  if (
+    state.filter === "cinematic"
+  ) {
+
+    filters.push(
+      "contrast(125%) saturate(90%)"
+    );
+
+  }
+
+  if (
+    state.filter === "warm"
+  ) {
+
+    filters.push(
+      "sepia(20%) saturate(130%)"
+    );
+
+  }
+
+  if (
+    state.filter === "cool"
+  ) {
+
+    filters.push(
+      "hue-rotate(15deg) saturate(90%)"
+    );
+
+  }
+
+  return filters.join(" ");
+
+}
+
+
+/* =========================================================
+   DRAW VIDEO
+========================================================= */
+
+function drawVideo() {
+
+  if (!video.videoWidth) {
+    return;
+  }
+
+  ctx.save();
 
   ctx.clearRect(
     0,
     0,
-    width,
-    height
+    canvas.width,
+    canvas.height
   );
-
-  ctx.save();
 
   ctx.filter =
-    getFilterCSS();
+    getFilter();
+
+  const cw =
+    canvas.width;
+
+  const ch =
+    canvas.height;
 
   ctx.translate(
-    width / 2,
-    height / 2
+    cw / 2,
+    ch / 2
   );
-
-  let scaleX = 1;
-  let scaleY = 1;
-
-  if (
-    state.flip ===
-    "horizontal"
-  ) {
-
-    scaleX = -1;
-
-  }
-
-  if (
-    state.flip ===
-    "vertical"
-  ) {
-
-    scaleY = -1;
-
-  }
 
   ctx.rotate(
-    state.rotate *
-    Math.PI /
-    180
+    Number(state.rotate) *
+    Math.PI / 180
   );
-
-  ctx.scale(
-    scaleX,
-    scaleY
-  );
-
-  let drawW =
-    width;
-
-  let drawH =
-    height;
 
   if (
-    state.rotate === 90 ||
-    state.rotate === 270
+    state.flip === "horizontal"
   ) {
 
-    drawW =
-      height;
-
-    drawH =
-      width;
+    ctx.scale(-1, 1);
 
   }
+
+  if (
+    state.flip === "vertical"
+  ) {
+
+    ctx.scale(1, -1);
+
+  }
+
+  const scale =
+    Math.min(
+      cw / video.videoWidth,
+      ch / video.videoHeight
+    );
+
+  const w =
+    video.videoWidth * scale;
+
+  const h =
+    video.videoHeight * scale;
 
   ctx.drawImage(
     video,
-    -drawW / 2,
-    -drawH / 2,
-    drawW,
-    drawH
+    -w / 2,
+    -h / 2,
+    w,
+    h
   );
 
   ctx.restore();
 
-}
-
-
-/* -----------------------------------------------------
-   Canvas sizing
------------------------------------------------------ */
-
-function resizePreviewCanvas() {
-
-  if (!state.videoFile) return;
-
-  const rect =
-    previewArea.getBoundingClientRect();
-
-  const videoW =
-    video.videoWidth ||
-    1280;
-
-  const videoH =
-    video.videoHeight ||
-    720;
-
-  const ratio =
-    videoW / videoH;
-
-  let width =
-    rect.width;
-
-  let height =
-    width / ratio;
-
-  if (height > rect.height) {
-
-    height =
-      rect.height;
-
-    width =
-      height * ratio;
-
-  }
-
-  previewCanvas.style.width =
-    `${width}px`;
-
-  previewCanvas.style.height =
-    `${height}px`;
+  ctx.filter =
+    "none";
 
 }
 
 
-window.addEventListener(
-  "resize",
-  resizePreviewCanvas
-);
+/* =========================================================
+   TEXT ANIMATION
+========================================================= */
 
-video.addEventListener(
-  "loadedmetadata",
-  resizePreviewCanvas
-);
+function getAnimatedTextPosition(
+  time,
+  width,
+  height
+) {
 
+  const animation =
+    state.textAnimation;
 
-/* -----------------------------------------------------
-   Animation preview overlay
------------------------------------------------------ */
+  const speed =
+    Number(state.animationSpeed);
 
-function removePreviewObjects() {
+  const progress =
+    ((time * speed) % 4) / 4;
 
-  qsa(".text-preview")
-    .forEach(
-      e => e.remove()
-    );
+  let x =
+    width / 2;
 
-  qsa(".frame-preview")
-    .forEach(
-      e => e.remove()
-    );
+  let y =
+    height / 2;
+
+  if (state.textPosition === "top") {
+    y = height * 0.15;
+  }
+
+  if (state.textPosition === "bottom") {
+    y = height * 0.85;
+  }
+
+  if (
+    animation === "left"
+  ) {
+
+    x =
+      -300 +
+      (width + 600) * progress;
+
+  }
+
+  if (
+    animation === "right"
+  ) {
+
+    x =
+      width + 300 -
+      (width + 600) * progress;
+
+  }
+
+  if (
+    animation === "up"
+  ) {
+
+    y =
+      height + 150 -
+      (height + 300) * progress;
+
+  }
+
+  if (
+    animation === "down"
+  ) {
+
+    y =
+      -150 +
+      (height + 300) * progress;
+
+  }
+
+  if (
+    animation === "float"
+  ) {
+
+    x =
+      width / 2 +
+      Math.sin(time * speed * 2) *
+      width *
+      0.12;
+
+    y +=
+      Math.sin(time * speed * 3) *
+      25;
+
+  }
+
+  return {
+    x,
+    y,
+    progress
+  };
 
 }
 
 
-function addTextPreview() {
+/* =========================================================
+   DRAW TEXT
+========================================================= */
 
-  if (!state.text) return;
-
-  const el =
-    document.createElement(
-      "div"
-    );
-
-  el.className =
-    "text-preview";
-
-  el.textContent =
-    state.text;
-
-  el.style.color =
-    state.textColor;
-
-  el.style.fontFamily =
-    state.textFont;
-
-  el.style.fontSize =
-    `${Math.max(
-      14,
-      state.textSize *
-      .55
-    )}px`;
+function drawText(time) {
 
   if (
-    state.textStyle ===
-    "bold"
-  ) {
-
-    el.style.fontWeight =
-      "bold";
-
-  }
-
-  if (
-    state.textStyle ===
-    "italic"
-  ) {
-
-    el.style.fontStyle =
-      "italic";
-
-  }
-
-  if (
-    state.textStyle ===
-    "bolditalic"
-  ) {
-
-    el.style.fontWeight =
-      "bold";
-
-    el.style.fontStyle =
-      "italic";
-
-  }
-
-  if (state.textShadow) {
-
-    el.style.textShadow =
-      "3px 3px 7px black";
-
-  }
-
-  if (state.textBackground) {
-
-    el.style.background =
-      state.textBg;
-
-    el.style.padding =
-      "8px 14px";
-
-    el.style.borderRadius =
-      "8px";
-
-  }
-
-  if (
-    state.textAlign ===
-    "left"
-  ) {
-
-    el.style.left =
-      "5%";
-
-    el.style.transform =
-      "translateY(-50%)";
-
-  }
-
-  if (
-    state.textAlign ===
-    "center"
-  ) {
-
-    el.style.left =
-      "50%";
-
-    el.style.transform =
-      "translate(-50%,-50%)";
-
-  }
-
-  if (
-    state.textAlign ===
-    "right"
-  ) {
-
-    el.style.right =
-      "5%";
-
-    el.style.transform =
-      "translateY(-50%)";
-
-  }
-
-  if (
-    state.textPosition ===
-    "top"
-  ) {
-
-    el.style.top =
-      "14%";
-
-  }
-
-  if (
-    state.textPosition ===
-    "middle"
-  ) {
-
-    el.style.top =
-      "50%";
-
-  }
-
-  if (
-    state.textPosition ===
-    "bottom"
-  ) {
-
-    el.style.top =
-      "84%";
-
-  }
-
-  const animationClass =
-    {
-      left: "text-left",
-      right: "text-right",
-      up: "text-up",
-      down: "text-down",
-      float: "text-float",
-      fade: "text-fade",
-      zoom: "text-zoom",
-      bounce: "text-bounce",
-      type: "text-type"
-    }[
-      state.textAnimation
-    ];
-
-  if (animationClass) {
-
-    el.classList.add(
-      animationClass
-    );
-
-    const duration =
-      11 -
-      state.animationSpeed;
-
-    el.style.animationDuration =
-      `${duration / 2}s`;
-
-  }
-
-  previewArea.appendChild(
-    el
-  );
-
-}
-
-
-function addFramePreview() {
-
-  if (
-    !state.overlayURL ||
-    state.frame ===
-    "none"
+    !state.text.trim()
   ) {
 
     return;
 
   }
 
-  const wrap =
-    document.createElement(
-      "div"
-    );
-
-  wrap.className =
-    `frame-preview frame-${state.frame}`;
-
   const width =
-    previewArea.clientWidth;
+    canvas.width;
 
-  const size =
-    width *
-    state.overlaySize /
-    100;
+  const height =
+    canvas.height;
 
-  wrap.style.width =
-    `${size}px`;
-
-  wrap.style.height =
-    `${size * .72}px`;
-
-  if (
-    state.frame ===
-    "circle"
-  ) {
-
-    wrap.style.height =
-      `${size}px`;
-
-  }
-
-  if (
-    state.overlayX ===
-    "left"
-  ) {
-
-    wrap.style.left =
-      "5%";
-
-  }
-
-  if (
-    state.overlayX ===
-    "center"
-  ) {
-
-    wrap.style.left =
-      "50%";
-
-    wrap.style.transform =
-      "translateX(-50%)";
-
-  }
-
-  if (
-    state.overlayX ===
-    "right"
-  ) {
-
-    wrap.style.right =
-      "5%";
-
-  }
-
-  if (
-    state.overlayY ===
-    "top"
-  ) {
-
-    wrap.style.top =
-      "8%";
-
-  }
-
-  if (
-    state.overlayY ===
-    "center"
-  ) {
-
-    wrap.style.top =
-      "50%";
-
-    const old =
-      wrap.style.transform ||
-      "";
-
-    wrap.style.transform =
-      `${old} translateY(-50%)`;
-
-  }
-
-  if (
-    state.overlayY ===
-    "bottom"
-  ) {
-
-    wrap.style.bottom =
-      "8%";
-
-  }
-
-  let media;
-
-  if (
-    state.overlayType ===
-    "video"
-  ) {
-
-    media =
-      document.createElement(
-        "video"
-      );
-
-    media.src =
-      state.overlayURL;
-
-    media.muted = true;
-
-    media.autoplay = true;
-
-    media.loop = true;
-
-    media.playsInline = true;
-
-    media.play().catch(
-      () => {}
+  const pos =
+    getAnimatedTextPosition(
+      time,
+      width,
+      height
     );
 
-  } else {
+  let fontWeight =
+    "normal";
 
-    media =
-      document.createElement(
-        "img"
-      );
-
-    media.src =
-      state.overlayURL;
-
-  }
-
-  wrap.appendChild(
-    media
-  );
-
-  previewArea.appendChild(
-    wrap
-  );
-
-}
-
-
-/* Re-render overlays */
-
-function updateOverlayPreview() {
-
-  removePreviewObjects();
-
-  addTextPreview();
-
-  addFramePreview();
-
-}
-
-
-setInterval(
-  updateOverlayPreview,
-  700
-);
-
-
-/* -----------------------------------------------------
-   Templates
------------------------------------------------------ */
-
-qsa("[data-template]")
-  .forEach(
-    button => {
-
-      button.addEventListener(
-        "click",
-        () => {
-
-          const name =
-            button.dataset.template;
-
-          state.template =
-            name;
-
-          qsa("[data-template]")
-            .forEach(
-              b =>
-                b.classList.remove(
-                  "active"
-                )
-            );
-
-          button.classList.add(
-            "active"
-          );
-
-          applyTemplate(
-            name
-          );
-
-        }
-      );
-
-    }
-  );
-
-
-function applyTemplate(name) {
-
-  if (name === "clean") {
-
-    state.filter =
-      "none";
-
-    state.frame =
-      "none";
-
-    textInput.value =
-      "";
-
-    state.text = "";
-
-  }
-
-  if (name === "cinema") {
-
-    state.filter =
-      "cinematic";
-
-    state.frame =
-      "premium";
-
-  }
-
-  if (name === "social") {
-
-    state.filter =
-      "none";
-
-    state.frame =
-      "rounded";
-
-    textBackground.checked =
-      true;
-
-    state.textBackground =
-      true;
-
-  }
-
-  if (name === "news") {
-
-    state.filter =
-      "contrast";
-
-    state.textPosition =
-      "bottom";
-
-    textPosition.value =
-      "bottom";
-
-    textBackground.checked =
-      true;
-
-    state.textBackground =
-      true;
-
-  }
-
-  if (name === "birthday") {
-
-    state.filter =
-      "vintage";
-
-    state.textAnimation =
-      "bounce";
-
-    textAnimation.value =
-      "bounce";
-
-  }
-
-  if (name === "business") {
-
-    state.filter =
-      "cool";
-
-    state.textAnimation =
-      "fade";
-
-    textAnimation.value =
-      "fade";
-
-  }
-
-  $("templateInfo")
-    .textContent =
-    `${name} template applied`;
-
-  updateTextState();
-
-  renderPreview();
-
-}
-
-
-/* -----------------------------------------------------
-   Export - Canvas MediaRecorder
------------------------------------------------------ */
-
-function getCanvasSize() {
-
-  const w =
-    video.videoWidth ||
-    1280;
-
-  const h =
-    video.videoHeight ||
-    720;
-
-  let targetW =
-    w;
-
-  let targetH =
-    h;
-
-  if (
-    resolution.value !==
-    "original"
-  ) {
-
-    const target =
-      Number(
-        resolution.value
-      );
-
-    const ratio =
-      w / h;
-
-    targetH =
-      target;
-
-    targetW =
-      Math.round(
-        target *
-        ratio
-      );
-
-  }
-
-  if (
-    targetW % 2
-  ) {
-
-    targetW--;
-
-  }
-
-  if (
-    targetH % 2
-  ) {
-
-    targetH--;
-
-  }
-
-  return {
-    width: targetW,
-    height: targetH
-  };
-
-}
-
-
-/* -----------------------------------------------------
-   Draw text on export canvas
------------------------------------------------------ */
-
-function drawExportText(
-  ctx,
-  width,
-  height,
-  currentTime,
-  duration
-) {
-
-  if (!state.text) return;
-
-  let text =
-    state.text;
-
-  if (
-    state.textAnimation ===
-    "type"
-  ) {
-
-    const progress =
-      clamp(
-        currentTime /
-        Math.max(
-          .1,
-          duration
-        ),
-        0,
-        1
-      );
-
-    const chars =
-      Math.floor(
-        text.length *
-        Math.min(
-          1,
-          progress * 1.8
-        )
-      );
-
-    text =
-      text.substring(
-        0,
-        chars
-      );
-
-  }
-
-  ctx.save();
-
-  const size =
-    state.textSize *
-    (
-      width /
-      Math.max(
-        640,
-        video.videoWidth
-      )
-    );
-
-  let weight =
-    "400";
-
-  let style =
+  let fontStyle =
     "normal";
 
   if (
-    state.textStyle ===
-    "bold"
+    state.fontStyle.includes("bold")
   ) {
 
-    weight =
-      "700";
+    fontWeight =
+      "bold";
 
   }
 
   if (
-    state.textStyle ===
-    "italic"
+    state.fontStyle.includes("italic")
   ) {
 
-    style =
+    fontStyle =
       "italic";
 
   }
 
-  if (
-    state.textStyle ===
-    "bolditalic"
-  ) {
+  let size =
+    Number(state.fontSize);
 
-    weight =
-      "700";
-
-    style =
-      "italic";
-
-  }
-
-  ctx.font =
-    `${style} ${weight} ${size}px ${state.textFont}`;
-
-  ctx.textAlign =
-    state.textAlign;
-
-  ctx.textBaseline =
-    "middle";
-
-  let x =
-    width / 2;
-
-  if (
-    state.textAlign ===
-    "left"
-  ) {
-
-    x =
-      width * .06;
-
-  }
-
-  if (
-    state.textAlign ===
-    "right"
-  ) {
-
-    x =
-      width * .94;
-
-  }
-
-  let y =
-    height / 2;
-
-  if (
-    state.textPosition ===
-    "top"
-  ) {
-
-    y =
-      height * .14;
-
-  }
-
-  if (
-    state.textPosition ===
-    "bottom"
-  ) {
-
-    y =
-      height * .84;
-
-  }
-
-
-  const progress =
-    duration > 0
-      ? currentTime / duration
-      : 0;
-
-  const speedFactor =
-    .5 +
-    state.animationSpeed /
-    10;
-
-
-  if (
-    state.textAnimation ===
-    "left"
-  ) {
-
-    x =
-      width *
-      (
-        -0.3 +
-        progress *
-        1.6 *
-        speedFactor
-      );
-
-  }
-
-  if (
-    state.textAnimation ===
-    "right"
-  ) {
-
-    x =
-      width *
-      (
-        1.3 -
-        progress *
-        1.6 *
-        speedFactor
-      );
-
-  }
-
-  if (
-    state.textAnimation ===
-    "up"
-  ) {
-
-    y =
-      height *
-      (
-        1.2 -
-        progress *
-        1.5 *
-        speedFactor
-      );
-
-  }
-
-  if (
-    state.textAnimation ===
-    "down"
-  ) {
-
-    y =
-      height *
-      (
-        -0.2 +
-        progress *
-        1.5 *
-        speedFactor
-      );
-
-  }
-
+  let scale =
+    1;
 
   let alpha =
     1;
 
   if (
-    state.textAnimation ===
-    "fade"
-  ) {
-
-    alpha =
-      .25 +
-      Math.abs(
-        Math.sin(
-          currentTime * 2
-        )
-      ) *
-      .75;
-
-  }
-
-
-  let scale =
-    1;
-
-  if (
-    state.textAnimation ===
-    "zoom"
+    state.textAnimation === "zoom"
   ) {
 
     scale =
-      .7 +
+      0.5 +
       Math.abs(
-        Math.sin(
-          currentTime * 2
-        )
+        Math.sin(time * 2)
       ) *
-      .5;
+      0.5;
 
   }
 
   if (
-    state.textAnimation ===
-    "bounce"
+    state.textAnimation === "fade"
   ) {
 
-    y +=
+    alpha =
+      0.3 +
       Math.abs(
-        Math.sin(
-          currentTime * 4
-        )
+        Math.sin(time * 2)
       ) *
-      -height *
-      .04;
+      0.7;
 
   }
 
   if (
-    state.textAnimation ===
-    "float"
+    state.textAnimation === "bounce"
   ) {
 
-    y +=
-      Math.sin(
-        currentTime * 2
+    pos.y +=
+      Math.abs(
+        Math.sin(time * 4)
       ) *
-      height *
-      .025;
+      -50;
 
   }
 
+  ctx.save();
 
   ctx.globalAlpha =
     alpha;
 
   ctx.translate(
-    x,
-    y
+    pos.x,
+    pos.y
   );
 
   ctx.scale(
@@ -2090,73 +727,24 @@ function drawExportText(
     scale
   );
 
-  const metrics =
-    ctx.measureText(
-      text
-    );
+  ctx.textAlign =
+    state.textAlign;
 
-  const padding =
-    size * .22;
+  ctx.textBaseline =
+    "middle";
 
-
-  if (
-    state.textBackground
-  ) {
-
-    let boxX;
-
-    if (
-      state.textAlign ===
-      "center"
-    ) {
-
-      boxX =
-        -metrics.width / 2;
-
-    } else if (
-      state.textAlign ===
-      "right"
-    ) {
-
-      boxX =
-        -metrics.width;
-
-    } else {
-
-      boxX = 0;
-
-    }
-
-    ctx.fillStyle =
-      state.textBg;
-
-    ctx.globalAlpha =
-      .75;
-
-    ctx.fillRect(
-      boxX - padding,
-      -size / 2 - padding / 2,
-      metrics.width +
-        padding * 2,
-      size +
-        padding
-    );
-
-    ctx.globalAlpha =
-      alpha;
-
-  }
-
+  ctx.font =
+    `${fontStyle} ${fontWeight} ${size}px ${state.fontFamily}`;
 
   if (
     state.textShadow
   ) {
 
     ctx.shadowColor =
-      "rgba(0,0,0,.9)";
+      "rgba(0,0,0,0.8)";
 
     ctx.shadowBlur =
-      10;
+      8;
 
     ctx.shadowOffsetX =
       3;
@@ -2166,14 +754,71 @@ function drawExportText(
 
   }
 
+  const lines =
+    state.text.split("\n");
 
-  ctx.fillStyle =
-    state.textColor;
+  const lineHeight =
+    size * 1.25;
 
-  ctx.fillText(
-    text,
-    0,
-    0
+  lines.forEach(
+    (line, index) => {
+
+      const lineY =
+        (index -
+        (lines.length - 1) / 2) *
+        lineHeight;
+
+      if (
+        !state.transparentBg
+      ) {
+
+        const metrics =
+          ctx.measureText(line);
+
+        const padding =
+          15;
+
+        ctx.save();
+
+        ctx.shadowColor =
+          "transparent";
+
+        ctx.fillStyle =
+          state.textBg;
+
+        ctx.fillRect(
+
+          -(
+            metrics.width / 2
+          ) -
+          padding,
+
+          lineY -
+          size / 2 -
+          padding / 2,
+
+          metrics.width +
+          padding * 2,
+
+          size +
+          padding
+
+        );
+
+        ctx.restore();
+
+      }
+
+      ctx.fillStyle =
+        state.textColor;
+
+      ctx.fillText(
+        line,
+        0,
+        lineY
+      );
+
+    }
   );
 
   ctx.restore();
@@ -2181,1294 +826,2033 @@ function drawExportText(
 }
 
 
-/* -----------------------------------------------------
-   Draw overlay frame
------------------------------------------------------ */
+/* =========================================================
+   OVERLAY MEDIA
+========================================================= */
 
-async function createOverlayElement() {
+$("overlayInput").addEventListener(
+  "change",
+  e => {
 
-  if (
-    !state.overlayFile ||
-    state.frame ===
-    "none"
-  ) {
+    const file =
+      e.target.files[0];
 
-    return null;
+    if (!file) {
+      return;
+    }
 
-  }
+    overlayFile =
+      file;
 
-  const element =
-    document.createElement(
-      state.overlayType ===
-      "video"
-        ? "video"
-        : "img"
-    );
+    if (overlayURL) {
 
-  element.src =
-    state.overlayURL;
-
-  element.muted = true;
-
-  element.playsInline = true;
-
-  if (
-    state.overlayType ===
-    "video"
-  ) {
-
-    element.loop =
-      true;
-
-    await new Promise(
-      resolve => {
-
-        if (
-          element.readyState >=
-          2
-        ) {
-
-          resolve();
-
-        } else {
-
-          element.onloadeddata =
-            resolve;
-
-        }
-
-      }
-    );
-
-    await element.play()
-      .catch(
-        () => {}
+      URL.revokeObjectURL(
+        overlayURL
       );
 
-  } else {
+    }
 
-    await new Promise(
-      resolve => {
+    overlayURL =
+      URL.createObjectURL(file);
 
-        if (
-          element.complete
-        ) {
+    if (
+      file.type.startsWith("video/")
+    ) {
 
-          resolve();
+      overlayMedia =
+        document.createElement("video");
 
-        } else {
+      overlayMedia.src =
+        overlayURL;
 
-          element.onload =
-            resolve;
+      overlayMedia.muted =
+        true;
 
-        }
+      overlayMedia.loop =
+        true;
 
-      }
-    );
+      overlayMedia.playsInline =
+        true;
+
+      overlayMedia.play()
+        .catch(() => {});
+
+    } else {
+
+      overlayMedia =
+        new Image();
+
+      overlayMedia.src =
+        overlayURL;
+
+    }
+
+  }
+);
+
+
+/* =========================================================
+   DRAW OVERLAY
+========================================================= */
+
+function drawOverlay(time) {
+
+  if (
+    !overlayMedia
+  ) {
+
+    return;
 
   }
 
-  return element;
+  if (
+    overlayMedia.readyState !== undefined &&
+    overlayMedia.readyState < 2
+  ) {
+
+    return;
+
+  }
+
+  const cw =
+    canvas.width;
+
+  const ch =
+    canvas.height;
+
+  const scale =
+    Number(state.overlayScale);
+
+  const base =
+    Math.min(cw, ch);
+
+  const w =
+    base * scale;
+
+  const ratio =
+    overlayMedia.videoWidth
+      ? overlayMedia.videoHeight /
+        overlayMedia.videoWidth
+      : 0.75;
+
+  const h =
+    w * ratio;
+
+  const x =
+    cw *
+    Number(state.overlayX) /
+    100;
+
+  const y =
+    ch *
+    Number(state.overlayY) /
+    100;
+
+  ctx.save();
+
+  drawFrameMedia(
+    overlayMedia,
+    x,
+    y,
+    w,
+    h,
+    selectedFrame
+  );
+
+  ctx.restore();
 
 }
 
 
-/* -----------------------------------------------------
-   Draw frame media on canvas
------------------------------------------------------ */
+/* =========================================================
+   FRAME DRAWING
+========================================================= */
 
-function drawOverlay(
-  ctx,
-  overlay,
-  width,
-  height
+function drawFrameMedia(
+  media,
+  x,
+  y,
+  w,
+  h,
+  frame
 ) {
 
-  if (!overlay) return;
-
-  const size =
-    width *
-    state.overlaySize /
-    100;
-
-  let ow =
-    size;
-
-  let oh =
-    size *
-    .72;
-
   if (
-    state.frame ===
-    "circle"
+    frame === "circle"
   ) {
 
-    oh =
-      size;
-
-  }
-
-  let x =
-    (width - ow) / 2;
-
-  let y =
-    (height - oh) / 2;
-
-  if (
-    state.overlayX ===
-    "left"
-  ) {
-
-    x =
-      width * .05;
-
-  }
-
-  if (
-    state.overlayX ===
-    "right"
-  ) {
-
-    x =
-      width -
-      ow -
-      width * .05;
-
-  }
-
-  if (
-    state.overlayY ===
-    "top"
-  ) {
-
-    y =
-      height * .08;
-
-  }
-
-  if (
-    state.overlayY ===
-    "bottom"
-  ) {
-
-    y =
-      height -
-      oh -
-      height * .08;
-
-  }
-
-
-  ctx.save();
-
-  /* mask */
-
-  if (
-    state.frame ===
-    "circle"
-  ) {
+    ctx.save();
 
     ctx.beginPath();
 
     ctx.arc(
-      x + ow / 2,
-      y + oh / 2,
-      Math.min(
-        ow,
-        oh
-      ) / 2,
+      x,
+      y,
+      Math.min(w, h) / 2,
       0,
       Math.PI * 2
     );
 
     ctx.clip();
 
-  }
-
-  if (
-    state.frame ===
-    "rounded"
-  ) {
-
-    roundedClip(
-      ctx,
-      x,
-      y,
-      ow,
-      oh,
-      30
+    ctx.drawImage(
+      media,
+      x - w / 2,
+      y - h / 2,
+      w,
+      h
     );
 
-  }
+    ctx.restore();
 
-
-  ctx.drawImage(
-    overlay,
-    x,
-    y,
-    ow,
-    oh
-  );
-
-  ctx.restore();
-
-
-  /* frame */
-
-  ctx.save();
-
-  if (
-    state.frame ===
-    "circle"
-  ) {
+    ctx.save();
 
     ctx.strokeStyle =
       "#ffffff";
 
     ctx.lineWidth =
-      Math.max(
-        6,
-        width * .008
-      );
+      Math.max(5, w * 0.02);
 
     ctx.beginPath();
 
     ctx.arc(
-      x + ow / 2,
-      y + oh / 2,
-      Math.min(
-        ow,
-        oh
-      ) / 2,
+      x,
+      y,
+      Math.min(w, h) / 2,
       0,
       Math.PI * 2
     );
 
     ctx.stroke();
 
+    ctx.restore();
+
+    return;
   }
 
 
   if (
-    state.frame ===
-    "rounded"
+    frame === "heart"
   ) {
 
-    drawRoundedBorder(
-      ctx,
+    ctx.save();
+
+    ctx.beginPath();
+
+    const top =
+      y - h * 0.25;
+
+    ctx.moveTo(
       x,
-      y,
-      ow,
-      oh,
-      30,
-      "#ffffff"
+      y + h * 0.42
     );
 
+    ctx.bezierCurveTo(
+      x - w * 0.65,
+      y - h * 0.05,
+      x - w * 0.55,
+      top - h * 0.45,
+      x,
+      top
+    );
+
+    ctx.bezierCurveTo(
+      x + w * 0.55,
+      top - h * 0.45,
+      x + w * 0.65,
+      y - h * 0.05,
+      x,
+      y + h * 0.42
+    );
+
+    ctx.clip();
+
+    ctx.drawImage(
+      media,
+      x - w / 2,
+      y - h / 2,
+      w,
+      h
+    );
+
+    ctx.restore();
+
+    return;
   }
 
 
   if (
-    state.frame ===
-    "phone"
+    frame === "polaroid"
   ) {
 
-    drawRoundedBorder(
-      ctx,
-      x - 8,
-      y - 8,
-      ow + 16,
-      oh + 16,
-      35,
-      "#080808"
+    ctx.save();
+
+    ctx.fillStyle =
+      "#ffffff";
+
+    ctx.fillRect(
+      x - w / 2 - 15,
+      y - h / 2 - 15,
+      w + 30,
+      h + 55
     );
 
-    drawRoundedBorder(
-      ctx,
-      x - 3,
-      y - 3,
-      ow + 6,
-      oh + 6,
-      30,
-      "#777"
+    ctx.drawImage(
+      media,
+      x - w / 2,
+      y - h / 2,
+      w,
+      h
     );
 
+    ctx.restore();
+
+    return;
   }
 
 
-  if (
-    state.frame ===
-    "premium"
-  ) {
-
-    drawRoundedBorder(
-      ctx,
-      x - 8,
-      y - 8,
-      ow + 16,
-      oh + 16,
-      18,
-      "#d8b56a"
-    );
-
-  }
+  ctx.drawImage(
+    media,
+    x - w / 2,
+    y - h / 2,
+    w,
+    h
+  );
 
 
   if (
-    state.frame ===
-    "tv"
+    frame === "mobile"
   ) {
 
-    drawRoundedBorder(
-      ctx,
-      x - 12,
-      y - 12,
-      ow + 24,
-      oh + 24,
-      20,
-      "#333"
-    );
-
-  }
-
-
-  if (
-    state.frame ===
-    "film"
-  ) {
+    ctx.save();
 
     ctx.strokeStyle =
-      "#111";
+      "#111111";
+
+    ctx.lineWidth =
+      Math.max(10, w * 0.035);
+
+    ctx.strokeRect(
+      x - w / 2,
+      y - h / 2,
+      w,
+      h
+    );
+
+    ctx.fillStyle =
+      "#111111";
+
+    ctx.fillRect(
+      x - w * 0.07,
+      y - h / 2,
+      w * 0.14,
+      8
+    );
+
+    ctx.restore();
+
+  }
+
+
+  if (
+    frame === "rounded"
+  ) {
+
+    ctx.save();
+
+    ctx.strokeStyle =
+      "#ffffff";
+
+    ctx.lineWidth =
+      8;
+
+    ctx.strokeRect(
+      x - w / 2,
+      y - h / 2,
+      w,
+      h
+    );
+
+    ctx.restore();
+
+  }
+
+
+  if (
+    frame === "film"
+  ) {
+
+    ctx.save();
+
+    ctx.strokeStyle =
+      "#ffffff";
+
+    ctx.lineWidth =
+      10;
+
+    ctx.strokeRect(
+      x - w / 2,
+      y - h / 2,
+      w,
+      h
+    );
+
+    ctx.fillStyle =
+      "#ffffff";
+
+    for (
+      let i = 0;
+      i < 5;
+      i++
+    ) {
+
+      ctx.fillRect(
+        x - w / 2 - 4,
+        y - h / 2 + i * h / 4,
+        12,
+        20
+      );
+
+      ctx.fillRect(
+        x + w / 2 - 8,
+        y - h / 2 + i * h / 4,
+        12,
+        20
+      );
+
+    }
+
+    ctx.restore();
+
+  }
+
+
+  if (
+    frame === "premium"
+  ) {
+
+    ctx.save();
+
+    ctx.strokeStyle =
+      "#f5d76e";
+
+    ctx.lineWidth =
+      12;
+
+    ctx.strokeRect(
+      x - w / 2,
+      y - h / 2,
+      w,
+      h
+    );
+
+    ctx.strokeStyle =
+      "#ffffff";
+
+    ctx.lineWidth =
+      3;
+
+    ctx.strokeRect(
+      x - w / 2 + 15,
+      y - h / 2 + 15,
+      w - 30,
+      h - 30
+    );
+
+    ctx.restore();
+
+  }
+
+
+  if (
+    frame === "tv"
+  ) {
+
+    ctx.save();
+
+    ctx.strokeStyle =
+      "#202020";
 
     ctx.lineWidth =
       18;
 
     ctx.strokeRect(
-      x,
-      y,
-      ow,
-      oh
+      x - w / 2,
+      y - h / 2,
+      w,
+      h
     );
+
+    ctx.restore();
 
   }
 
+}
+
+
+/* =========================================================
+   TEMPLATES
+========================================================= */
+
+function drawTemplate() {
+
+  const w =
+    canvas.width;
+
+  const h =
+    canvas.height;
 
   if (
-    state.frame ===
-    "polaroid"
+    selectedTemplate === "cinema"
   ) {
 
     ctx.fillStyle =
-      "#fff";
+      "rgba(0,0,0,0.35)";
 
     ctx.fillRect(
-      x - 10,
-      y - 10,
-      ow + 20,
-      oh + 55
+      0,
+      0,
+      w,
+      h * 0.10
+    );
+
+    ctx.fillRect(
+      0,
+      h * 0.90,
+      w,
+      h * 0.10
     );
 
   }
 
-  ctx.restore();
-
-}
-
-
-function roundedClip(
-  ctx,
-  x,
-  y,
-  w,
-  h,
-  r
-) {
-
-  r =
-    Math.min(
-      r,
-      w / 2,
-      h / 2
-    );
-
-  ctx.beginPath();
-
-  ctx.moveTo(
-    x + r,
-    y
-  );
-
-  ctx.lineTo(
-    x + w - r,
-    y
-  );
-
-  ctx.quadraticCurveTo(
-    x + w,
-    y,
-    x + w,
-    y + r
-  );
-
-  ctx.lineTo(
-    x + w,
-    y + h - r
-  );
-
-  ctx.quadraticCurveTo(
-    x + w,
-    y + h,
-    x + w - r,
-    y + h
-  );
-
-  ctx.lineTo(
-    x + r,
-    y + h
-  );
-
-  ctx.quadraticCurveTo(
-    x,
-    y + h,
-    x,
-    y + h - r
-  );
-
-  ctx.lineTo(
-    x,
-    y + r
-  );
-
-  ctx.quadraticCurveTo(
-    x,
-    y,
-    x + r,
-    y
-  );
-
-  ctx.closePath();
-
-  ctx.clip();
-
-}
-
-
-function drawRoundedBorder(
-  ctx,
-  x,
-  y,
-  w,
-  h,
-  r,
-  color
-) {
-
-  r =
-    Math.min(
-      r,
-      w / 2,
-      h / 2
-    );
-
-  ctx.strokeStyle =
-    color;
-
-  ctx.lineWidth =
-    Math.max(
-      5,
-      w * .012
-    );
-
-  ctx.beginPath();
-
-  ctx.moveTo(
-    x + r,
-    y
-  );
-
-  ctx.lineTo(
-    x + w - r,
-    y
-  );
-
-  ctx.quadraticCurveTo(
-    x + w,
-    y,
-    x + w,
-    y + r
-  );
-
-  ctx.lineTo(
-    x + w,
-    y + h - r
-  );
-
-  ctx.quadraticCurveTo(
-    x + w,
-    y + h,
-    x + w - r,
-    y + h
-  );
-
-  ctx.lineTo(
-    x + r,
-    y + h
-  );
-
-  ctx.quadraticCurveTo(
-    x,
-    y + h,
-    x,
-    y + h - r
-  );
-
-  ctx.lineTo(
-    x,
-    y + r
-  );
-
-  ctx.quadraticCurveTo(
-    x,
-    y,
-    x + r,
-    y
-  );
-
-  ctx.stroke();
-
-}
-
-
-/* -----------------------------------------------------
-   Draw complete frame
------------------------------------------------------ */
-
-function drawExportFrame(
-  ctx,
-  width,
-  height
-) {
 
   if (
-    state.frame ===
-    "none"
-  ) {
-
-    return;
-
-  }
-
-  ctx.save();
-
-  if (
-    state.frame ===
-    "premium"
+    selectedTemplate === "story"
   ) {
 
     ctx.strokeStyle =
-      "#d8b56a";
+      "rgba(255,255,255,0.8)";
 
     ctx.lineWidth =
-      Math.max(
-        10,
-        width * .012
-      );
+      10;
 
     ctx.strokeRect(
-      10,
-      10,
-      width - 20,
-      height - 20
+      20,
+      20,
+      w - 40,
+      h - 40
     );
 
   }
 
+
   if (
-    state.frame ===
-    "film"
+    selectedTemplate === "vintage"
+  ) {
+
+    ctx.fillStyle =
+      "rgba(170,120,60,0.12)";
+
+    ctx.fillRect(
+      0,
+      0,
+      w,
+      h
+    );
+
+  }
+
+
+  if (
+    selectedTemplate === "minimal"
   ) {
 
     ctx.strokeStyle =
-      "#111";
+      "rgba(255,255,255,0.7)";
 
     ctx.lineWidth =
-      Math.max(
-        25,
-        width * .025
-      );
+      3;
 
     ctx.strokeRect(
-      0,
-      0,
-      width,
-      height
+      25,
+      25,
+      w - 50,
+      h - 50
     );
 
   }
 
-  ctx.restore();
+
+  if (
+    selectedTemplate === "social"
+  ) {
+
+    ctx.fillStyle =
+      "rgba(0,0,0,0.18)";
+
+    ctx.fillRect(
+      0,
+      h * 0.82,
+      w,
+      h * 0.18
+    );
+
+  }
 
 }
 
 
-/* -----------------------------------------------------
-   Export main
------------------------------------------------------ */
+/* =========================================================
+   MAIN RENDER
+========================================================= */
 
-async function exportVideo() {
+function renderPreview() {
 
-  if (!state.videoFile) {
-
-    alert(
-      "पहले video upload करें।"
-    );
-
+  if (!video.videoWidth) {
     return;
-
   }
 
+  drawVideo();
 
-  const start =
-    Number(
-      startTime.value
+  drawTemplate();
+
+  drawOverlay(
+    video.currentTime
+  );
+
+  drawText(
+    video.currentTime
+  );
+
+  updateTextDOM();
+
+  animationFrame =
+    requestAnimationFrame(
+      renderPreview
     );
 
-  const end =
-    Number(
-      endTime.value
-    ) ||
-    video.duration;
+}
+
+
+/* =========================================================
+   TEXT DOM PREVIEW
+========================================================= */
+
+function updateTextDOM() {
 
   if (
-    end <= start
+    !state.text.trim()
   ) {
 
-    alert(
-      "End time, Start time से बड़ा होना चाहिए।"
-    );
+    textPreview.textContent =
+      "";
 
     return;
 
   }
 
+  textPreview.textContent =
+    state.text;
 
-  loading(
-    true,
-    "Video export तैयार हो रहा है..."
-  );
+  textPreview.style.color =
+    state.textColor;
 
-  setProgress(
-    2,
-    "Preparing video..."
-  );
+  textPreview.style.fontFamily =
+    state.fontFamily;
+
+  textPreview.style.fontSize =
+    `${Math.max(12, state.fontSize * 0.45)}px`;
+
+  textPreview.style.fontWeight =
+    state.fontStyle.includes("bold")
+      ? "700"
+      : "400";
+
+  textPreview.style.fontStyle =
+    state.fontStyle.includes("italic")
+      ? "italic"
+      : "normal";
+
+  textPreview.style.textAlign =
+    state.textAlign;
+
+  textPreview.style.background =
+    state.transparentBg
+      ? "transparent"
+      : state.textBg;
+
+  textPreview.style.boxShadow =
+    state.textShadow
+      ? "3px 3px 8px rgba(0,0,0,0.8)"
+      : "none";
+
+  textPreview.style.left =
+    "50%";
+
+  if (
+    state.textPosition === "top"
+  ) {
+
+    textPreview.style.top =
+      "15%";
+
+  }
+
+  if (
+    state.textPosition === "middle"
+  ) {
+
+    textPreview.style.top =
+      "50%";
+
+  }
+
+  if (
+    state.textPosition === "bottom"
+  ) {
+
+    textPreview.style.top =
+      "85%";
+
+  }
+
+  textPreview.style.transform =
+    "translate(-50%, -50%)";
+
+}
 
 
-  try {
+/* =========================================================
+   TAB SYSTEM
+========================================================= */
 
-    const size =
-      getCanvasSize();
+document
+  .querySelectorAll(".tab")
+  .forEach(
+    button => {
 
-    const canvas =
-      document.createElement(
-        "canvas"
-      );
+      button.addEventListener(
+        "click",
+        () => {
 
-    canvas.width =
-      size.width;
+          document
+            .querySelectorAll(".tab")
+            .forEach(
+              b =>
+                b.classList.remove(
+                  "active"
+                )
+            );
 
-    canvas.height =
-      size.height;
+          document
+            .querySelectorAll(".panel")
+            .forEach(
+              p =>
+                p.classList.remove(
+                  "active"
+                )
+            );
 
-    const ctx =
-      canvas.getContext(
-        "2d",
-        {
-          alpha: false
+          button.classList.add(
+            "active"
+          );
+
+          const panel =
+            $(button.dataset.tab);
+
+          if (panel) {
+
+            panel.classList.add(
+              "active"
+            );
+
+          }
+
         }
       );
 
+    }
+  );
 
-    const overlay =
-      await createOverlayElement();
+
+/* =========================================================
+   GENERIC SETTINGS
+========================================================= */
+
+function bindRange(
+  id,
+  key
+) {
+
+  const element =
+    $(id);
+
+  if (!element) {
+    return;
+  }
+
+  element.addEventListener(
+    "input",
+    () => {
+
+      state[key] =
+        element.value;
+
+      renderPreview();
+
+    }
+  );
+
+}
 
 
-    video.pause();
+bindRange(
+  "brightness",
+  "brightness"
+);
 
-    video.currentTime =
-      start;
+bindRange(
+  "contrast",
+  "contrast"
+);
 
-    video.playbackRate =
-      state.speed;
+bindRange(
+  "saturation",
+  "saturation"
+);
+
+bindRange(
+  "volume",
+  "volume"
+);
+
+bindRange(
+  "animationSpeed",
+  "animationSpeed"
+);
+
+bindRange(
+  "overlayScale",
+  "overlayScale"
+);
+
+bindRange(
+  "overlayX",
+  "overlayX"
+);
+
+bindRange(
+  "overlayY",
+  "overlayY"
+);
+
+
+/* =========================================================
+   SELECT SETTINGS
+========================================================= */
+
+function bindSelect(
+  id,
+  key
+) {
+
+  $(id).addEventListener(
+    "change",
+    () => {
+
+      state[key] =
+        $(id).value;
+
+      renderPreview();
+
+    }
+  );
+
+}
+
+
+bindSelect(
+  "rotate",
+  "rotate"
+);
+
+bindSelect(
+  "flip",
+  "flip"
+);
+
+bindSelect(
+  "resolution",
+  "resolution"
+);
+
+bindSelect(
+  "filter",
+  "filter"
+);
+
+bindSelect(
+  "speed",
+  "speed"
+);
+
+bindSelect(
+  "fontFamily",
+  "fontFamily"
+);
+
+bindSelect(
+  "fontStyle",
+  "fontStyle"
+);
+
+bindSelect(
+  "textAlign",
+  "textAlign"
+);
+
+bindSelect(
+  "textPosition",
+  "textPosition"
+);
+
+bindSelect(
+  "textAnimation",
+  "textAnimation"
+);
+
+
+/* =========================================================
+   TEXT INPUTS
+========================================================= */
+
+$("textInput").addEventListener(
+  "input",
+  () => {
+
+    state.text =
+      $("textInput").value;
+
+    renderPreview();
+
+  }
+);
+
+
+$("textColor").addEventListener(
+  "input",
+  () => {
+
+    state.textColor =
+      $("textColor").value;
+
+    renderPreview();
+
+  }
+);
+
+
+$("textBg").addEventListener(
+  "input",
+  () => {
+
+    state.textBg =
+      $("textBg").value;
+
+    renderPreview();
+
+  }
+);
+
+
+$("transparentBg").addEventListener(
+  "change",
+  () => {
+
+    state.transparentBg =
+      $("transparentBg").checked;
+
+    renderPreview();
+
+  }
+);
+
+
+$("fontSize").addEventListener(
+  "input",
+  () => {
+
+    state.fontSize =
+      $("fontSize").value;
+
+    renderPreview();
+
+  }
+);
+
+
+$("textShadow").addEventListener(
+  "change",
+  () => {
+
+    state.textShadow =
+      $("textShadow").checked;
+
+    renderPreview();
+
+  }
+);
+
+
+/* =========================================================
+   AUDIO SETTINGS
+========================================================= */
+
+$("volume").addEventListener(
+  "input",
+  () => {
+
+    state.volume =
+      Number(
+        $("volume").value
+      );
+
+    video.volume =
+      Math.min(
+        1,
+        state.volume / 100
+      );
+
+  }
+);
+
+
+$("mute").addEventListener(
+  "change",
+  () => {
+
+    state.mute =
+      $("mute").checked;
 
     video.muted =
       state.mute;
 
+  }
+);
 
-    await new Promise(
-      resolve => {
 
-        const done =
-          () => {
+$("speed").addEventListener(
+  "change",
+  () => {
 
-            video.removeEventListener(
-              "seeked",
-              done
+    state.speed =
+      Number(
+        $("speed").value
+      );
+
+    video.playbackRate =
+      state.speed;
+
+  }
+);
+
+
+/* =========================================================
+   MUSIC
+========================================================= */
+
+$("musicInput").addEventListener(
+  "change",
+  e => {
+
+    musicFile =
+      e.target.files[0];
+
+    if (musicFile) {
+
+      $("musicName").textContent =
+        musicFile.name;
+
+    }
+
+  }
+);
+
+
+$("removeMusic").addEventListener(
+  "click",
+  () => {
+
+    musicFile =
+      null;
+
+    $("musicInput").value =
+      "";
+
+    $("musicName").textContent =
+      "कोई music नहीं चुना गया";
+
+  }
+);
+
+
+/* =========================================================
+   FRAME BUTTONS
+========================================================= */
+
+document
+  .querySelectorAll(".frame-btn")
+  .forEach(
+    button => {
+
+      button.addEventListener(
+        "click",
+        () => {
+
+          document
+            .querySelectorAll(".frame-btn")
+            .forEach(
+              b =>
+                b.classList.remove(
+                  "active"
+                )
             );
 
-            resolve();
+          button.classList.add(
+            "active"
+          );
+
+          selectedFrame =
+            button.dataset.frame;
+
+          renderPreview();
+
+        }
+      );
+
+    }
+  );
+
+
+$("removeOverlay").addEventListener(
+  "click",
+  () => {
+
+    overlayFile =
+      null;
+
+    overlayMedia =
+      null;
+
+    if (overlayURL) {
+
+      URL.revokeObjectURL(
+        overlayURL
+      );
+
+      overlayURL =
+        null;
+
+    }
+
+    $("overlayInput").value =
+      "";
+
+    renderPreview();
+
+  }
+);
+
+
+/* =========================================================
+   TEMPLATE BUTTONS
+========================================================= */
+
+document
+  .querySelectorAll(".template-btn")
+  .forEach(
+    button => {
+
+      button.addEventListener(
+        "click",
+        () => {
+
+          document
+            .querySelectorAll(".template-btn")
+            .forEach(
+              b =>
+                b.classList.remove(
+                  "active"
+                )
+            );
+
+          button.classList.add(
+            "active"
+          );
+
+          selectedTemplate =
+            button.dataset.template;
+
+          renderPreview();
+
+        }
+      );
+
+    }
+  );
+
+
+/* =========================================================
+   TIMELINE
+========================================================= */
+
+video.addEventListener(
+  "timeupdate",
+  () => {
+
+    const duration =
+      video.duration || 0;
+
+    if (duration) {
+
+      $("timelineRange").value =
+        (
+          video.currentTime /
+          duration
+        ) *
+        100;
+
+    }
+
+    $("currentTime").textContent =
+      formatTime(
+        video.currentTime
+      );
+
+  }
+);
+
+
+$("timelineRange").addEventListener(
+  "input",
+  () => {
+
+    if (!video.duration) {
+      return;
+    }
+
+    video.currentTime =
+      video.duration *
+      (
+        Number(
+          $("timelineRange").value
+        ) / 100
+      );
+
+  }
+);
+
+
+$("playBtn").addEventListener(
+  "click",
+  () => {
+
+    video.play();
+
+  }
+);
+
+
+$("pauseBtn").addEventListener(
+  "click",
+  () => {
+
+    video.pause();
+
+  }
+);
+
+
+$("resetBtn").addEventListener(
+  "click",
+  () => {
+
+    video.currentTime =
+      Number(
+        $("startTime").value || 0
+      );
+
+  }
+);
+
+
+/* =========================================================
+   FORMAT TIME
+========================================================= */
+
+function formatTime(seconds) {
+
+  if (
+    !Number.isFinite(seconds)
+  ) {
+
+    return "00:00";
+
+  }
+
+  const mins =
+    Math.floor(
+      seconds / 60
+    );
+
+  const secs =
+    Math.floor(
+      seconds % 60
+    );
+
+  return (
+    String(mins).padStart(2, "0") +
+    ":" +
+    String(secs).padStart(2, "0")
+  );
+
+}
+
+
+/* =========================================================
+   START / END
+========================================================= */
+
+$("startTime").addEventListener(
+  "change",
+  () => {
+
+    const start =
+      Number(
+        $("startTime").value
+      );
+
+    if (
+      Number.isFinite(start)
+    ) {
+
+      video.currentTime =
+        start;
+
+    }
+
+  }
+);
+
+
+$("endTime").addEventListener(
+  "change",
+  () => {
+
+    const end =
+      Number(
+        $("endTime").value
+      );
+
+    if (
+      Number.isFinite(end) &&
+      video.currentTime > end
+    ) {
+
+      video.currentTime =
+        end;
+
+    }
+
+  }
+);
+
+
+/* =========================================================
+   AUDIO STREAM
+========================================================= */
+
+function setupAudio() {
+
+  if (
+    audioContext
+  ) {
+
+    return;
+
+  }
+
+  audioContext =
+    new (
+      window.AudioContext ||
+      window.webkitAudioContext
+    )();
+
+  mediaDestination =
+    audioContext.createMediaStreamDestination();
+
+  try {
+
+    sourceNode =
+      audioContext.createMediaElementSource(
+        video
+      );
+
+    sourceNode
+      .connect(
+        audioContext.destination
+      );
+
+    sourceNode
+      .connect(
+        mediaDestination
+      );
+
+  } catch (error) {
+
+    console.warn(
+      "Audio source setup:",
+      error
+    );
+
+  }
+
+}
+
+
+/* =========================================================
+   MUSIC STREAM
+========================================================= */
+
+async function setupMusic() {
+
+  if (!musicFile) {
+    return;
+  }
+
+  if (!audioContext) {
+    setupAudio();
+  }
+
+  const music =
+    new Audio();
+
+  music.src =
+    URL.createObjectURL(
+      musicFile
+    );
+
+  music.loop =
+    true;
+
+  music.volume =
+    0.45;
+
+  try {
+
+    await music.play();
+
+  } catch (error) {
+
+    console.warn(
+      "Music playback requires user interaction.",
+      error
+    );
+
+  }
+
+  try {
+
+    musicSourceNode =
+      audioContext.createMediaElementSource(
+        music
+      );
+
+    musicSourceNode
+      .connect(
+        mediaDestination
+      );
+
+  } catch (error) {
+
+    console.warn(
+      "Music audio setup:",
+      error
+    );
+
+  }
+
+  return music;
+
+}
+
+
+/* =========================================================
+   EXPORT CANVAS STREAM
+========================================================= */
+
+async function createExportStream() {
+
+  if (!videoFile) {
+
+    throw new Error(
+      "पहले video upload करें।"
+    );
+
+  }
+
+  resizeCanvasForResolution();
+
+  setupAudio();
+
+  if (
+    audioContext &&
+    audioContext.state === "suspended"
+  ) {
+
+    await audioContext.resume();
+
+  }
+
+  const canvasStream =
+    canvas.captureStream(30);
+
+  const tracks = [
+    ...canvasStream.getVideoTracks()
+  ];
+
+  if (
+    mediaDestination
+  ) {
+
+    tracks.push(
+      ...mediaDestination
+        .stream
+        .getAudioTracks()
+    );
+
+  }
+
+  return new MediaStream(
+    tracks
+  );
+
+}
+
+
+/* =========================================================
+   WEBM EXPORT
+========================================================= */
+
+async function exportWebM() {
+
+  const stream =
+    await createExportStream();
+
+  const mimeTypes = [
+
+    "video/webm;codecs=vp9,opus",
+
+    "video/webm;codecs=vp8,opus",
+
+    "video/webm"
+
+  ];
+
+  let mimeType =
+    "";
+
+  for (
+    const type of mimeTypes
+  ) {
+
+    if (
+      MediaRecorder.isTypeSupported(
+        type
+      )
+    ) {
+
+      mimeType =
+        type;
+
+      break;
+
+    }
+
+  }
+
+  if (!mimeType) {
+
+    throw new Error(
+      "इस browser में video recording supported नहीं है।"
+    );
+
+  }
+
+  const recorder =
+    new MediaRecorder(
+      stream,
+      {
+        mimeType
+      }
+    );
+
+  const chunks =
+    [];
+
+  recorder.ondataavailable =
+    event => {
+
+      if (
+        event.data.size
+      ) {
+
+        chunks.push(
+          event.data
+        );
+
+      }
+
+    };
+
+
+  const blobPromise =
+    new Promise(
+      resolve => {
+
+        recorder.onstop =
+          () => {
+
+            resolve(
+              new Blob(
+                chunks,
+                {
+                  type:
+                    mimeType
+                }
+              )
+            );
 
           };
-
-        video.addEventListener(
-          "seeked",
-          done
-        );
 
       }
     );
 
 
-    const stream =
-      canvas.captureStream(
-        30
-      );
+  recorder.start(
+    250
+  );
+
+  const start =
+    Number(
+      $("startTime").value || 0
+    );
+
+  const end =
+    Number(
+      $("endTime").value ||
+      video.duration
+    );
+
+  video.currentTime =
+    start;
+
+  video.muted =
+    true;
+
+  await video.play();
+
+  const duration =
+    Math.max(
+      0.1,
+      end - start
+    );
+
+  const startedAt =
+    performance.now();
 
 
-    /*
-      Audio capture.
-      We use the video element audio when possible.
-    */
+  return new Promise(
+    resolve => {
 
-    let audioContext = null;
-    let audioDestination = null;
+      function tick() {
+
+        const elapsed =
+          (
+            performance.now() -
+            startedAt
+          ) / 1000;
+
+        const percent =
+          Math.min(
+            100,
+            (
+              elapsed /
+              duration
+            ) * 100
+          );
+
+        progressBar.style.width =
+          `${percent}%`;
+
+        progressText.textContent =
+          `Exporting ${Math.round(percent)}%`;
+
+        if (
+          elapsed >= duration ||
+          video.currentTime >= end
+        ) {
+
+          video.pause();
+
+          recorder.stop();
+
+          resolve(
+            blobPromise
+          );
+
+          return;
+
+        }
+
+        requestAnimationFrame(
+          tick
+        );
+
+      }
+
+      tick();
+
+    }
+  );
+
+}
+
+
+/* =========================================================
+   FFMPEG MP4 CONVERSION
+========================================================= */
+
+async function convertToMP4(
+  webmBlob
+) {
+
+  progressText.textContent =
+    "MP4 conversion शुरू हो रहा है...";
+
+  progressBar.style.width =
+    "10%";
+
+
+  if (
+    !window.FFmpeg ||
+    !window.FFmpegUtil
+  ) {
+
+    throw new Error(
+      "FFmpeg library उपलब्ध नहीं है। WebM format में export करें।"
+    );
+
+  }
+
+
+  const {
+    FFmpeg
+  } =
+    window.FFmpeg;
+
+  const {
+    fetchFile,
+    toBlobURL
+  } =
+    window.FFmpegUtil;
+
+
+  const ffmpeg =
+    new FFmpeg();
+
+
+  ffmpeg.on(
+    "progress",
+    ({ progress }) => {
+
+      const percent =
+        Math.round(
+          progress * 100
+        );
+
+      progressBar.style.width =
+        `${10 + percent * 0.9}%`;
+
+      progressText.textContent =
+        `MP4 conversion ${percent}%`;
+
+    }
+  );
+
+
+  const base =
+    "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd";
+
+
+  await ffmpeg.load({
+
+    coreURL:
+      await toBlobURL(
+        `${base}/ffmpeg-core.js`,
+        "text/javascript"
+      ),
+
+    wasmURL:
+      await toBlobURL(
+        `${base}/ffmpeg-core.wasm`,
+        "application/wasm"
+      )
+
+  });
+
+
+  await ffmpeg.writeFile(
+    "input.webm",
+    await fetchFile(
+      webmBlob
+    )
+  );
+
+
+  await ffmpeg.exec([
+    "-i",
+    "input.webm",
+
+    "-c:v",
+    "libx264",
+
+    "-preset",
+    "veryfast",
+
+    "-crf",
+    "23",
+
+    "-c:a",
+    "aac",
+
+    "-movflags",
+    "+faststart",
+
+    "output.mp4"
+  ]);
+
+
+  const data =
+    await ffmpeg.readFile(
+      "output.mp4"
+    );
+
+
+  return new Blob(
+    [data.buffer],
+    {
+      type:
+        "video/mp4"
+    }
+  );
+
+}
+
+
+/* =========================================================
+   DOWNLOAD
+========================================================= */
+
+function showDownload(
+  blob,
+  extension
+) {
+
+  if (
+    currentExportURL
+  ) {
+
+    URL.revokeObjectURL(
+      currentExportURL
+    );
+
+  }
+
+  currentExportURL =
+    URL.createObjectURL(
+      blob
+    );
+
+  downloadBox.innerHTML =
+    "";
+
+  const link =
+    document.createElement(
+      "a"
+    );
+
+  link.href =
+    currentExportURL;
+
+  link.download =
+    `ai-video-${Date.now()}.${extension}`;
+
+  link.textContent =
+    `⬇️ Download ${extension.toUpperCase()}`;
+
+  downloadBox.appendChild(
+    link
+  );
+
+}
+
+
+/* =========================================================
+   EXPORT BUTTON
+========================================================= */
+
+$("exportBtn").addEventListener(
+  "click",
+  async () => {
 
     try {
 
-      audioContext =
-        new (
-          window.AudioContext ||
-          window.webkitAudioContext
-        )();
+      if (!videoFile) {
 
-      const source =
-        audioContext
-          .createMediaElementSource(
-            video
-          );
-
-      audioDestination =
-        audioContext
-          .createMediaStreamDestination();
-
-      const gain =
-        audioContext
-          .createGain();
-
-      gain.gain.value =
-        state.mute
-          ? 0
-          : state.volume / 100;
-
-      source.connect(
-        gain
-      );
-
-      gain.connect(
-        audioDestination
-      );
-
-      const audioTracks =
-        audioDestination
-          .stream
-          .getAudioTracks();
-
-      audioTracks.forEach(
-        track =>
-          stream.addTrack(
-            track
-          )
-      );
-
-    } catch (audioError) {
-
-      console.warn(
-        "Audio capture unavailable:",
-        audioError
-      );
-
-    }
-
-
-    const mimeTypes = [
-
-      "video/webm;codecs=vp9,opus",
-
-      "video/webm;codecs=vp8,opus",
-
-      "video/webm"
-
-    ];
-
-
-    const mimeType =
-      mimeTypes.find(
-        type =>
-          MediaRecorder.isTypeSupported(
-            type
-          )
-      );
-
-
-    if (!mimeType) {
-
-      throw new Error(
-        "इस browser में video recording supported नहीं है।"
-      );
-
-    }
-
-
-    const recorder =
-      new MediaRecorder(
-        stream,
-        {
-          mimeType,
-          videoBitsPerSecond:
-            8000000
-        }
-      );
-
-
-    const chunks = [];
-
-
-    recorder.ondataavailable =
-      event => {
-
-        if (
-          event.data &&
-          event.data.size
-        ) {
-
-          chunks.push(
-            event.data
-          );
-
-        }
-
-      };
-
-
-    const recorderPromise =
-      new Promise(
-        (resolve, reject) => {
-
-          recorder.onstop =
-            () => {
-
-              resolve();
-
-            };
-
-          recorder.onerror =
-            event => {
-
-              reject(
-                event.error ||
-                new Error(
-                  "Recorder error"
-                )
-              );
-
-            };
-
-        }
-      );
-
-
-    /*
-      Draw loop
-    */
-
-    let stopped =
-      false;
-
-    const total =
-      end - start;
-
-
-    function drawFrame() {
-
-      if (stopped) return;
-
-
-      const current =
-        video.currentTime -
-        start;
-
-      const progress =
-        clamp(
-          current / total,
-          0,
-          1
+        alert(
+          "पहले video upload करें।"
         );
 
-
-      const vw =
-        video.videoWidth ||
-        1280;
-
-      const vh =
-        video.videoHeight ||
-        720;
-
-
-      ctx.clearRect(
-        0,
-        0,
-        canvas.width,
-        canvas.height
-      );
-
-
-      ctx.save();
-
-
-      ctx.filter =
-        getFilterCSS();
-
-
-      let scaleX = 1;
-      let scaleY = 1;
-
-
-      if (
-        state.flip ===
-        "horizontal"
-      ) {
-
-        scaleX = -1;
+        return;
 
       }
 
+      downloadBox.innerHTML =
+        "";
 
-      if (
-        state.flip ===
-        "vertical"
-      ) {
+      progressBar.style.width =
+        "0%";
 
-        scaleY = -1;
-
-      }
-
-
-      ctx.translate(
-        canvas.width / 2,
-        canvas.height / 2
-      );
+      progressText.textContent =
+        "Export शुरू हो रहा है...";
 
 
-      ctx.rotate(
-        state.rotate *
-        Math.PI /
-        180
-      );
+      const format =
+        $("exportFormat").value;
 
 
-      ctx.scale(
-        scaleX,
-        scaleY
-      );
-
-
-      let dw =
-        canvas.width;
-
-      let dh =
-        canvas.height;
+      const webm =
+        await exportWebM();
 
 
       if (
-        state.rotate === 90 ||
-        state.rotate === 270
+        format === "webm"
       ) {
 
-        dw =
-          canvas.height;
+        progressBar.style.width =
+          "100%";
 
-        dh =
-          canvas.width;
+        progressText.textContent =
+          "Export पूरा हो गया।";
 
-      }
-
-
-      /*
-        Cover the canvas while keeping aspect ratio.
-      */
-
-      const videoRatio =
-        vw / vh;
-
-      const canvasRatio =
-        dw / dh;
-
-      if (
-        videoRatio >
-        canvasRatio
-      ) {
-
-        dh =
-          dw /
-          videoRatio;
-
-      } else {
-
-        dw =
-          dh *
-          videoRatio;
-
-      }
-
-
-      ctx.drawImage(
-        video,
-        -dw / 2,
-        -dh / 2,
-        dw,
-        dh
-      );
-
-
-      ctx.restore();
-
-
-      /*
-        Frame media
-      */
-
-      if (overlay) {
-
-        drawOverlay(
-          ctx,
-          overlay,
-          canvas.width,
-          canvas.height
+        showDownload(
+          webm,
+          "webm"
         );
-
-      }
-
-
-      /*
-        Text
-      */
-
-      drawExportText(
-        ctx,
-        canvas.width,
-        canvas.height,
-        current,
-        total
-      );
-
-
-      /*
-        Global frame
-      */
-
-      drawExportFrame(
-        ctx,
-        canvas.width,
-        canvas.height
-      );
-
-
-      setProgress(
-        5 +
-        progress * 85,
-        `Rendering ${Math.round(
-          progress * 100
-        )}%`
-      );
-
-
-      if (
-        video.currentTime >=
-        end
-      ) {
-
-        stopped = true;
-
-        video.pause();
-
-        recorder.stop();
 
         return;
 
       }
 
 
-      requestAnimationFrame(
-        drawFrame
-      );
-
-    }
-
-
-    recorder.start(
-      250
-    );
-
-
-    await video.play();
-
-
-    drawFrame();
-
-
-    await recorderPromise;
-
-
-    if (audioContext) {
-
       try {
 
-        await audioContext.close();
+        const mp4 =
+          await convertToMP4(
+            webm
+          );
 
-      } catch (_) {}
+        progressBar.style.width =
+          "100%";
 
-    }
+        progressText.textContent =
+          "MP4 Export पूरा हो गया।";
 
+        showDownload(
+          mp4,
+          "mp4"
+        );
 
-    const blob =
-      new Blob(
-        chunks,
-        {
-          type:
-            mimeType
-        }
-      );
+      } catch (
+        mp4Error
+      ) {
 
+        console.error(
+          mp4Error
+        );
 
-    if (!blob.size) {
+        progressText.textContent =
+          "MP4 conversion उपलब्ध नहीं हुआ। WebM export तैयार है।";
 
-      throw new Error(
-        "Exported video empty है।"
-      );
+        showDownload(
+          webm,
+          "webm"
+        );
 
-    }
+      }
 
-
-    const url =
-      URL.createObjectURL(
-        blob
-      );
-
-
-    const download =
-      $("downloadBtn");
-
-
-    download.href =
-      url;
-
-    download.download =
-      "ai-edited-video.webm";
-
-    download.textContent =
-      "⬇️ Download Edited Video";
-
-    download.classList
-      .remove("hidden");
-
-
-    setProgress(
-      100,
-      "Export complete!"
-    );
-
-
-    loading(
-      false
-    );
-
-
-    alert(
-      "वीडियो तैयार है। नीचे Download बटन दबाकर डाउनलोड करें।"
-    );
-
-
-  } catch (error) {
-
-    console.error(
-      "Export error:",
+    } catch (
       error
-    );
+    ) {
 
-    loading(
-      false
-    );
+      console.error(
+        error
+      );
 
-    $("progressBox")
-      .classList
-      .remove("hidden");
+      progressText.textContent =
+        "Export में error आया।";
 
-    $("progressText")
-      .textContent =
-      "Export failed: " +
-      error.message;
+      alert(
+        error.message ||
+        "Video export नहीं हो सका।"
+      );
 
-
-    alert(
-      "Export में समस्या आई:\n\n" +
-      error.message +
-      "\n\nChrome/Edge में दोबारा प्रयास करें।"
-    );
+    }
 
   }
-
-}
-
-
-/* -----------------------------------------------------
-   Export buttons
------------------------------------------------------ */
-
-$("exportBtn")
-  .addEventListener(
-    "click",
-    exportVideo
-  );
-
-$("exportBtnSide")
-  .addEventListener(
-    "click",
-    exportVideo
-  );
+);
 
 
-/* -----------------------------------------------------
-   Initial UI
------------------------------------------------------ */
+/* =========================================================
+   INITIALIZE
+========================================================= */
 
-$("volumeValue")
-  .textContent =
-  "100";
+video.addEventListener(
+  "loadedmetadata",
+  () => {
 
-$("textSizeValue")
-  .textContent =
-  "60";
+    setupCanvas();
 
-$("animationSpeedValue")
-  .textContent =
-  "5";
+    renderPreview();
 
-$("overlaySizeValue")
-  .textContent =
-  "35";
+  }
+);
 
 
-/* -----------------------------------------------------
-   Initial render
------------------------------------------------------ */
+video.addEventListener(
+  "play",
+  () => {
+
+    if (!animationFrame) {
+
+      renderPreview();
+
+    }
+
+  }
+);
+
 
 video.addEventListener(
   "loadeddata",
@@ -3476,37 +2860,20 @@ video.addEventListener(
 
     renderPreview();
 
-    resizePreviewCanvas();
-
-    updateOverlayPreview();
-
   }
 );
 
 
-/* -----------------------------------------------------
-   File cleanup
------------------------------------------------------ */
+/* =========================================================
+   START
+========================================================= */
 
-window.addEventListener(
-  "beforeunload",
-  () => {
+progressBar.style.width =
+  "0%";
 
-    if (state.videoURL) {
+progressText.textContent =
+  "Ready";
 
-      URL.revokeObjectURL(
-        state.videoURL
-      );
-
-    }
-
-    if (state.overlayURL) {
-
-      URL.revokeObjectURL(
-        state.overlayURL
-      );
-
-    }
-
-  }
+console.log(
+  "AI Video Editor loaded successfully."
 );
