@@ -2,16 +2,26 @@
 <html lang="hi">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-  <title>AI Video Editor</title>
 
   <meta
-    name="description"
-    content="Online AI Video Editor - Trim, edit, add text, filters and download videos."
+    name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0"
   >
 
+  <title>AI Video Editor - Professional</title>
+
   <link rel="stylesheet" href="style.css">
+
+  <!-- FFmpeg -->
+  <script
+    src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js"
+    crossorigin="anonymous">
+  </script>
+
+  <script
+    src="https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.1/dist/umd/index.js"
+    crossorigin="anonymous">
+  </script>
 </head>
 
 <body>
@@ -19,133 +29,157 @@
 <header class="topbar">
 
   <div class="brand">
-    🎬 AI Video Editor
+    <div class="brand-icon">🎬</div>
+
+    <div>
+      <div class="brand-title">AI Video Editor</div>
+      <div class="brand-subtitle">
+        Professional Online Video Editor
+      </div>
+    </div>
   </div>
 
-  <button id="newProjectBtn" class="small-btn">
-    + नया वीडियो
+  <button id="exportBtn" class="export-top">
+    🚀 Export Video
   </button>
 
 </header>
 
 
-<main class="container">
+<main class="app">
 
-  <!-- UPLOAD -->
+  <!-- LEFT -->
+  <section class="workspace">
 
-  <section id="uploadSection" class="upload-section">
+    <div class="preview-card">
 
-    <div id="dropZone" class="drop-zone">
+      <div class="preview-header">
 
-      <div class="upload-icon">🎬</div>
+        <div>
+          <b>Video Preview</b>
+          <span id="videoStatus">No video</span>
+        </div>
 
-      <h1>अपना वीडियो एडिट करें</h1>
-
-      <p>
-        Trim, Text, Color, Font, Filter, Speed और
-        दूसरे editing options इस्तेमाल करें।
-      </p>
-
-      <label class="upload-btn">
-
-        📁 वीडियो चुनें
-
-        <input
-          type="file"
-          id="videoInput"
-          accept="video/*"
-          hidden
-        >
-
-      </label>
-
-      <p class="small-note">
-        Basic processing आपके browser में होती है।
-      </p>
-
-    </div>
-
-  </section>
-
-
-  <!-- EDITOR -->
-
-  <section
-    id="editorSection"
-    class="editor hidden"
-  >
-
-    <!-- PREVIEW -->
-
-    <div class="preview-panel">
-
-      <div class="video-wrapper">
-
-        <video
-          id="videoPreview"
-          controls
-          playsinline
-        ></video>
-
-        <!-- LIVE TEXT PREVIEW -->
-
-        <div
-          id="liveText"
-          class="live-text hidden"
-        >
-          आपका Text
+        <div class="preview-actions">
+          <button id="playBtn">▶</button>
+          <button id="pauseBtn">⏸</button>
         </div>
 
       </div>
 
 
-      <div class="video-info">
+      <div id="previewArea" class="preview-area">
 
-        <span id="fileName">
-          कोई वीडियो नहीं
-        </span>
+        <video
+          id="video"
+          playsinline
+          crossorigin="anonymous">
+        </video>
 
-        <span id="videoDuration">
-          00:00
-        </span>
+        <canvas id="previewCanvas"></canvas>
+
+        <div id="emptyPreview" class="empty-preview">
+
+          <div class="upload-icon">🎬</div>
+
+          <h2>अपना वीडियो डालें</h2>
+
+          <p>
+            वीडियो को यहाँ चुनें या Drag & Drop करें
+          </p>
+
+          <label class="upload-btn">
+            📁 Video चुनें
+            <input
+              id="videoInput"
+              type="file"
+              accept="video/*"
+              hidden
+            >
+          </label>
+
+        </div>
+
+      </div>
+
+
+      <div class="timeline">
+
+        <div class="time-row">
+
+          <span id="currentTime">00:00</span>
+
+          <input
+            id="seek"
+            type="range"
+            min="0"
+            max="100"
+            value="0"
+          >
+
+          <span id="duration">00:00</span>
+
+        </div>
+
+        <div class="trim-row">
+
+          <label>
+            Start
+            <input
+              id="startTime"
+              type="number"
+              value="0"
+              min="0"
+              step="0.1"
+            >
+          </label>
+
+          <label>
+            End
+            <input
+              id="endTime"
+              type="number"
+              value="0"
+              min="0"
+              step="0.1"
+            >
+          </label>
+
+        </div>
 
       </div>
 
     </div>
 
 
-    <!-- CONTROLS -->
+    <!-- TOOL TABS -->
 
-    <div class="controls-panel">
+    <div class="tools-card">
 
       <div class="tabs">
 
-        <button
-          class="tab active"
-          data-tab="basic"
-        >
-          ✂️ Basic
+        <button class="tab active" data-tab="basic">
+          ⚙️ Basic
         </button>
 
-        <button
-          class="tab"
-          data-tab="look"
-        >
+        <button class="tab" data-tab="look">
           🎨 Look
         </button>
 
-        <button
-          class="tab"
-          data-tab="audio"
-        >
+        <button class="tab" data-tab="text">
+          📝 Text
+        </button>
+
+        <button class="tab" data-tab="frame">
+          🖼️ Frames
+        </button>
+
+        <button class="tab" data-tab="audio">
           🔊 Audio
         </button>
 
-        <button
-          class="tab"
-          data-tab="text"
-        >
-          📝 Text
+        <button class="tab" data-tab="templates">
+          ✨ Templates
         </button>
 
       </div>
@@ -153,301 +187,156 @@
 
       <!-- BASIC -->
 
-      <div
-        class="tab-content active"
-        id="basic"
-      >
+      <div id="tab-basic" class="tab-content active">
 
-        <h2>✂️ Trim Video</h2>
+        <h3>Basic Editing</h3>
 
-        <div class="range-grid">
+        <div class="control-grid">
 
-          <div>
+          <div class="control">
+            <label>Rotate</label>
 
-            <label>
-              Start
-            </label>
+            <select id="rotate">
 
-            <input
-              id="startTime"
-              type="number"
-              min="0"
-              step="0.1"
-              value="0"
-            >
+              <option value="0">0°</option>
+              <option value="90">90°</option>
+              <option value="180">180°</option>
+              <option value="270">270°</option>
 
-            <span>seconds</span>
-
+            </select>
           </div>
 
 
-          <div>
+          <div class="control">
+            <label>Flip</label>
 
-            <label>
-              End
-            </label>
+            <select id="flip">
 
-            <input
-              id="endTime"
-              type="number"
-              min="0"
-              step="0.1"
-              value="0"
-            >
+              <option value="none">None</option>
+              <option value="horizontal">Horizontal</option>
+              <option value="vertical">Vertical</option>
 
-            <span>seconds</span>
+            </select>
+          </div>
+
+
+          <div class="control">
+
+            <label>Resolution</label>
+
+            <select id="resolution">
+
+              <option value="original">Original</option>
+              <option value="1080">1080p</option>
+              <option value="720">720p</option>
+              <option value="480">480p</option>
+
+            </select>
 
           </div>
 
         </div>
-
-
-        <h2>🔄 Transform</h2>
-
-        <div class="button-grid">
-
-          <button id="rotateLeft">
-            ↶ Rotate Left
-          </button>
-
-          <button id="rotateRight">
-            ↷ Rotate Right
-          </button>
-
-          <button id="flipH">
-            ↔ Flip Horizontal
-          </button>
-
-          <button id="flipV">
-            ↕ Flip Vertical
-          </button>
-
-        </div>
-
-
-        <h2>📐 Resolution</h2>
-
-        <select id="resolution">
-
-          <option value="original">
-            Original
-          </option>
-
-          <option value="1080">
-            1080p
-          </option>
-
-          <option value="720">
-            720p
-          </option>
-
-          <option value="480">
-            480p
-          </option>
-
-        </select>
 
       </div>
 
 
       <!-- LOOK -->
 
-      <div
-        class="tab-content"
-        id="look"
-      >
+      <div id="tab-look" class="tab-content">
 
-        <h2>🎨 Video Adjustments</h2>
+        <h3>Color & Filters</h3>
 
-        <label>
-          Brightness:
-          <span id="brightnessValue">
-            0
-          </span>
-        </label>
+        <div class="slider-control">
 
-        <input
-          id="brightness"
-          type="range"
-          min="-1"
-          max="1"
-          step="0.05"
-          value="0"
-        >
+          <label>
+            Brightness
+            <span id="brightnessValue">100</span>
+          </label>
 
-
-        <label>
-          Contrast:
-          <span id="contrastValue">
-            1
-          </span>
-        </label>
-
-        <input
-          id="contrast"
-          type="range"
-          min="0"
-          max="3"
-          step="0.05"
-          value="1"
-        >
-
-
-        <label>
-          Saturation:
-          <span id="saturationValue">
-            1
-          </span>
-        </label>
-
-        <input
-          id="saturation"
-          type="range"
-          min="0"
-          max="3"
-          step="0.05"
-          value="1"
-        >
-
-
-        <h2>🎞️ Filters</h2>
-
-        <div class="button-grid">
-
-          <button
-            class="filter-btn active-filter"
-            data-filter="none"
+          <input
+            id="brightness"
+            type="range"
+            min="50"
+            max="150"
+            value="100"
           >
-            Normal
-          </button>
 
-          <button
-            class="filter-btn"
-            data-filter="gray"
-          >
-            Black & White
-          </button>
+        </div>
 
-          <button
-            class="filter-btn"
-            data-filter="sepia"
-          >
-            Sepia
-          </button>
 
-          <button
-            class="filter-btn"
-            data-filter="vintage"
+        <div class="slider-control">
+
+          <label>
+            Contrast
+            <span id="contrastValue">100</span>
+          </label>
+
+          <input
+            id="contrast"
+            type="range"
+            min="50"
+            max="150"
+            value="100"
           >
-            Vintage
-          </button>
+
+        </div>
+
+
+        <div class="slider-control">
+
+          <label>
+            Saturation
+            <span id="saturationValue">100</span>
+          </label>
+
+          <input
+            id="saturation"
+            type="range"
+            min="0"
+            max="200"
+            value="100"
+          >
+
+        </div>
+
+
+        <div class="filter-grid">
+
+          <button data-filter="none">Normal</button>
+          <button data-filter="grayscale">B&W</button>
+          <button data-filter="sepia">Sepia</button>
+          <button data-filter="vintage">Vintage</button>
+          <button data-filter="cinematic">Cinematic</button>
+          <button data-filter="cool">Cool</button>
 
         </div>
 
       </div>
 
 
-      <!-- AUDIO -->
+      <!-- TEXT -->
 
-      <div
-        class="tab-content"
-        id="audio"
-      >
+      <div id="tab-text" class="tab-content">
 
-        <h2>🔊 Volume</h2>
+        <h3>Professional Text Designer</h3>
 
-        <label>
-          Volume:
-          <span id="volumeValue">
-            100%
-          </span>
-        </label>
+        <div class="control">
 
-        <input
-          id="volume"
-          type="range"
-          min="0"
-          max="2"
-          step="0.05"
-          value="1"
-        >
+          <label>Text</label>
+
+          <textarea
+            id="textInput"
+            placeholder="अपना text यहाँ लिखें..."
+          ></textarea>
+
+        </div>
 
 
-        <button
-          id="muteBtn"
-          class="wide-btn"
-        >
-          🔇 Mute Video
-        </button>
+        <div class="control-grid">
 
+          <div class="control">
 
-        <h2>⚡ Speed</h2>
-
-        <select id="speed">
-
-          <option value="0.25">
-            0.25x
-          </option>
-
-          <option value="0.5">
-            0.5x
-          </option>
-
-          <option value="0.75">
-            0.75x
-          </option>
-
-          <option
-            value="1"
-            selected
-          >
-            1x Normal
-          </option>
-
-          <option value="1.25">
-            1.25x
-          </option>
-
-          <option value="1.5">
-            1.5x
-          </option>
-
-          <option value="2">
-            2x
-          </option>
-
-        </select>
-
-      </div>
-
-
-      <!-- TEXT DESIGNER -->
-
-      <div
-        class="tab-content"
-        id="text"
-      >
-
-        <h2>📝 Text Designer</h2>
-
-        <label>
-          अपना Text लिखें
-        </label>
-
-        <textarea
-          id="overlayText"
-          rows="3"
-          placeholder="यहाँ अपना Text लिखें..."
-        ></textarea>
-
-
-        <div class="designer-grid">
-
-          <div>
-
-            <label>
-              Text Color
-            </label>
+            <label>Text Color</label>
 
             <input
               id="textColor"
@@ -458,181 +347,149 @@
           </div>
 
 
-          <div>
+          <div class="control">
 
-            <label>
-              Background
-            </label>
+            <label>Background</label>
 
             <input
-              id="textBgColor"
+              id="textBg"
               type="color"
               value="#000000"
             >
 
           </div>
 
+
+          <div class="control">
+
+            <label>Font</label>
+
+            <select id="textFont">
+
+              <option>Arial</option>
+              <option>Verdana</option>
+              <option>Georgia</option>
+              <option>Trebuchet MS</option>
+              <option>Courier New</option>
+              <option>Impact</option>
+              <option>Times New Roman</option>
+
+            </select>
+
+          </div>
+
+
+          <div class="control">
+
+            <label>Style</label>
+
+            <select id="textStyle">
+
+              <option value="normal">Normal</option>
+              <option value="bold">Bold</option>
+              <option value="italic">Italic</option>
+              <option value="bolditalic">Bold Italic</option>
+
+            </select>
+
+          </div>
+
         </div>
 
 
-        <label class="checkbox-row">
+        <div class="slider-control">
+
+          <label>
+            Text Size
+            <span id="textSizeValue">60</span>
+          </label>
 
           <input
-            id="transparentBg"
-            type="checkbox"
-            checked
+            id="textSize"
+            type="range"
+            min="18"
+            max="180"
+            value="60"
           >
-
-          Transparent Background
-
-        </label>
-
-
-        <label>
-          Text Size:
-          <span id="textSizeValue">
-            48px
-          </span>
-        </label>
-
-        <input
-          id="textSize"
-          type="range"
-          min="18"
-          max="180"
-          value="48"
-        >
-
-
-        <h3>
-          ✍️ Font Design
-        </h3>
-
-        <select id="fontFamily">
-
-          <option value="Arial">
-            Arial
-          </option>
-
-          <option value="Georgia">
-            Georgia
-          </option>
-
-          <option value="Verdana">
-            Verdana
-          </option>
-
-          <option value="Trebuchet MS">
-            Trebuchet MS
-          </option>
-
-          <option value="Courier New">
-            Courier New
-          </option>
-
-          <option value="Impact">
-            Impact
-          </option>
-
-          <option value="Times New Roman">
-            Times New Roman
-          </option>
-
-        </select>
-
-
-        <h3>
-          🖋️ लिखावट Style
-        </h3>
-
-        <div class="button-grid">
-
-          <button
-            class="font-style-btn active-font-style"
-            data-font-style="normal"
-          >
-            Normal
-          </button>
-
-          <button
-            class="font-style-btn"
-            data-font-style="bold"
-          >
-            Bold
-          </button>
-
-          <button
-            class="font-style-btn"
-            data-font-style="italic"
-          >
-            Italic
-          </button>
-
-          <button
-            class="font-style-btn"
-            data-font-style="bolditalic"
-          >
-            Bold Italic
-          </button>
 
         </div>
 
 
-        <h3>
-          ↔️ Alignment
-        </h3>
+        <div class="control-grid">
 
-        <div class="button-grid">
+          <div class="control">
 
-          <button
-            class="align-btn"
-            data-align="left"
-          >
-            Left
-          </button>
+            <label>Position</label>
 
-          <button
-            class="align-btn active-align"
-            data-align="center"
-          >
-            Center
-          </button>
+            <select id="textPosition">
 
-          <button
-            class="align-btn"
-            data-align="right"
-          >
-            Right
-          </button>
+              <option value="top">Top</option>
+              <option value="middle" selected>Middle</option>
+              <option value="bottom">Bottom</option>
+
+            </select>
+
+          </div>
+
+
+          <div class="control">
+
+            <label>Alignment</label>
+
+            <select id="textAlign">
+
+              <option value="left">Left</option>
+              <option value="center" selected>Center</option>
+              <option value="right">Right</option>
+
+            </select>
+
+          </div>
 
         </div>
 
 
-        <h3>
-          📍 Text Position
-        </h3>
+        <div class="control">
 
-        <select id="textPosition">
+          <label>Animation</label>
 
-          <option value="top">
-            Top
-          </option>
+          <select id="textAnimation">
 
-          <option
-            value="middle"
-            selected
+            <option value="none">Static</option>
+            <option value="left">Left → Right</option>
+            <option value="right">Right → Left</option>
+            <option value="up">Bottom → Top</option>
+            <option value="down">Top → Bottom</option>
+            <option value="float">Floating</option>
+            <option value="fade">Fade</option>
+            <option value="zoom">Zoom</option>
+            <option value="bounce">Bounce</option>
+            <option value="type">Typewriter</option>
+
+          </select>
+
+        </div>
+
+
+        <div class="slider-control">
+
+          <label>
+            Animation Speed
+            <span id="animationSpeedValue">5</span>
+          </label>
+
+          <input
+            id="animationSpeed"
+            type="range"
+            min="1"
+            max="10"
+            value="5"
           >
-            Middle
-          </option>
 
-          <option value="bottom">
-            Bottom
-          </option>
-
-        </select>
+        </div>
 
 
-        <label class="checkbox-row">
+        <label class="check">
 
           <input
             id="textShadow"
@@ -640,22 +497,133 @@
             checked
           >
 
-          🌑 Text Shadow
+          Text Shadow
 
         </label>
 
 
-        <div class="text-preview-box">
+        <label class="check">
 
-          <span>
-            Live Text Preview
-          </span>
-
-          <div
-            id="designerPreview"
-            class="designer-preview"
+          <input
+            id="textBackground"
+            type="checkbox"
           >
-            आपका Text
+
+          Background Box
+
+        </label>
+
+      </div>
+
+
+      <!-- FRAME -->
+
+      <div id="tab-frame" class="tab-content">
+
+        <h3>Photo / Video Frame</h3>
+
+        <p class="hint">
+          अपने वीडियो के ऊपर फोटो या दूसरा वीडियो लगाकर professional frame बना सकते हैं।
+        </p>
+
+
+        <div class="control">
+
+          <label>Overlay Media</label>
+
+          <input
+            id="overlayInput"
+            type="file"
+            accept="image/*,video/*"
+          >
+
+        </div>
+
+
+        <div class="frame-grid">
+
+          <button data-frame="none">
+            None
+          </button>
+
+          <button data-frame="rounded">
+            ▢ Rounded
+          </button>
+
+          <button data-frame="circle">
+            ⭕ Circle
+          </button>
+
+          <button data-frame="polaroid">
+            🖼️ Polaroid
+          </button>
+
+          <button data-frame="phone">
+            📱 Phone
+          </button>
+
+          <button data-frame="film">
+            🎞️ Film
+          </button>
+
+          <button data-frame="tv">
+            📺 TV
+          </button>
+
+          <button data-frame="premium">
+            💎 Premium
+          </button>
+
+        </div>
+
+
+        <div class="slider-control">
+
+          <label>
+            Overlay Size
+            <span id="overlaySizeValue">35</span>%
+          </label>
+
+          <input
+            id="overlaySize"
+            type="range"
+            min="10"
+            max="80"
+            value="35"
+          >
+
+        </div>
+
+
+        <div class="control-grid">
+
+          <div class="control">
+
+            <label>Horizontal</label>
+
+            <select id="overlayX">
+
+              <option value="left">Left</option>
+              <option value="center" selected>Center</option>
+              <option value="right">Right</option>
+
+            </select>
+
+          </div>
+
+
+          <div class="control">
+
+            <label>Vertical</label>
+
+            <select id="overlayY">
+
+              <option value="top">Top</option>
+              <option value="center" selected>Center</option>
+              <option value="bottom">Bottom</option>
+
+            </select>
+
           </div>
 
         </div>
@@ -663,67 +631,99 @@
       </div>
 
 
-      <!-- EXPORT -->
+      <!-- AUDIO -->
 
-      <div class="export-area">
+      <div id="tab-audio" class="tab-content">
 
-        <button
-          id="exportBtn"
-          class="export-btn"
-        >
-          🚀 Export Video
-        </button>
+        <h3>Audio</h3>
 
+        <div class="slider-control">
 
-        <div
-          id="progressBox"
-          class="progress-box hidden"
-        >
+          <label>
+            Volume
+            <span id="volumeValue">100</span>%
+          </label>
 
-          <div class="progress-text">
-
-            <span id="progressText">
-              Processing...
-            </span>
-
-            <span id="progressPercent">
-              0%
-            </span>
-
-          </div>
-
-
-          <div class="progress-track">
-
-            <div
-              id="progressBar"
-              class="progress-bar"
-            ></div>
-
-          </div>
-
-        </div>
-
-
-        <div
-          id="downloadBox"
-          class="download-box hidden"
-        >
-
-          <h3>
-            ✅ Edited Video तैयार है
-          </h3>
-
-          <a
-            id="downloadBtn"
-            class="download-btn"
-            href="#"
-            download="edited-video.mp4"
+          <input
+            id="volume"
+            type="range"
+            min="0"
+            max="150"
+            value="100"
           >
-            ⬇️ Edited Video Download करें
-          </a>
 
         </div>
+
+
+        <div class="control">
+
+          <label>Speed</label>
+
+          <select id="speed">
+
+            <option value="0.5">0.5x</option>
+            <option value="0.75">0.75x</option>
+            <option value="1" selected>1x</option>
+            <option value="1.25">1.25x</option>
+            <option value="1.5">1.5x</option>
+            <option value="2">2x</option>
+
+          </select>
+
+        </div>
+
+
+        <label class="check">
+
+          <input
+            id="mute"
+            type="checkbox"
+          >
+
+          Mute Video
+
+        </label>
+
+      </div>
+
+
+      <!-- TEMPLATES -->
+
+      <div id="tab-templates" class="tab-content">
+
+        <h3>Professional Templates</h3>
+
+        <div class="template-grid">
+
+          <button data-template="clean">
+            ✨ Clean
+          </button>
+
+          <button data-template="cinema">
+            🎬 Cinema
+          </button>
+
+          <button data-template="social">
+            📱 Social
+          </button>
+
+          <button data-template="news">
+            📰 News
+          </button>
+
+          <button data-template="birthday">
+            🎉 Birthday
+          </button>
+
+          <button data-template="business">
+            💼 Business
+          </button>
+
+        </div>
+
+        <p id="templateInfo" class="hint">
+          Template चुनें और फिर Text/Frame को customize करें।
+        </p>
 
       </div>
 
@@ -731,25 +731,127 @@
 
   </section>
 
+
+  <!-- RIGHT -->
+
+  <aside class="sidebar">
+
+    <div class="side-card">
+
+      <h3>📁 Media</h3>
+
+      <label class="upload-box">
+
+        <span>🎬</span>
+
+        <b>Video Upload</b>
+
+        <small>MP4, MOV, WebM आदि</small>
+
+        <input
+          id="videoInputSide"
+          type="file"
+          accept="video/*"
+          hidden
+        >
+
+      </label>
+
+    </div>
+
+
+    <div class="side-card">
+
+      <h3>🎨 Current Settings</h3>
+
+      <div class="setting-row">
+        <span>Filter</span>
+        <b id="settingFilter">Normal</b>
+      </div>
+
+      <div class="setting-row">
+        <span>Text</span>
+        <b id="settingText">None</b>
+      </div>
+
+      <div class="setting-row">
+        <span>Frame</span>
+        <b id="settingFrame">None</b>
+      </div>
+
+      <div class="setting-row">
+        <span>Speed</span>
+        <b id="settingSpeed">1x</b>
+      </div>
+
+    </div>
+
+
+    <div class="side-card export-card">
+
+      <h3>🚀 Export</h3>
+
+      <p>
+        आपका वीडियो browser में process होगा।
+      </p>
+
+      <button
+        id="exportBtnSide"
+        class="export-main">
+        🚀 Export & Download
+      </button>
+
+      <div
+        id="progressBox"
+        class="progress-box hidden">
+
+        <div class="progress-track">
+
+          <div
+            id="progressBar"
+            class="progress-bar">
+          </div>
+
+        </div>
+
+        <div id="progressText">
+          Preparing...
+        </div>
+
+      </div>
+
+      <a
+        id="downloadBtn"
+        class="download-btn hidden"
+        download="ai-edited-video.webm">
+        ⬇️ Download Edited Video
+      </a>
+
+    </div>
+
+  </aside>
+
 </main>
 
 
-<footer>
-  AI Video Editor • Browser-based video editing
-</footer>
+<!-- LOADING -->
 
+<div id="loading" class="loading hidden">
 
-<script
-  src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js"
-  crossorigin="anonymous">
-</script>
+  <div class="spinner"></div>
 
-<script
-  src="https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.1/dist/umd/index.js"
-  crossorigin="anonymous">
-</script>
+  <h3 id="loadingText">
+    Processing...
+  </h3>
+
+  <p>
+    Browser बंद न करें।
+  </p>
+
+</div>
+
 
 <script src="app.js"></script>
 
 </body>
-            </html>
+  </html>
