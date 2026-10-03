@@ -1,2103 +1,1600 @@
 "use strict";
 
-/*
-  AI VIDEO EDITOR PRO
-  -------------------
-  Canvas composition
-  Background video
-  Background live camera
-  Frame video/photo
-  Frame live camera
-  Premium frames
-  Premium color
-  Professional text
-  Audio mixer
-  Human-style voice processing
-  WebM export
-*/
+/* =========================================================
+   AI VIDEO EDITOR PRO
+   Canvas based compositor
+   ========================================================= */
 
-const $ = id => document.getElementById(id);
-
-const canvas = $("canvas");
+const canvas = document.getElementById("editorCanvas");
 const ctx = canvas.getContext("2d");
 
-const bgVideo = $("bgVideo");
-const overlayVideo = $("overlayVideo");
-const bgCameraVideo = $("bgCameraVideo");
-const frameCameraVideo = $("frameCameraVideo");
-const musicAudio = $("musicAudio");
+const bgVideo = document.getElementById("bgVideo");
+const frameVideo = document.getElementById("frameVideo");
+const bgCameraVideo = document.getElementById("bgCameraVideo");
+const frameCameraVideo = document.getElementById("frameCameraVideo");
+
+const bgFile = document.getElementById("bgFile");
+const frameFile = document.getElementById("frameFile");
+const musicFile = document.getElementById("musicFile");
+
+const statusEl = document.getElementById("status");
+const emptyPreview = document.getElementById("emptyPreview");
+
+const recordBtn = document.getElementById("recordBtn");
+const stopRecordBtn = document.getElementById("stopRecordBtn");
+const downloadBtn = document.getElementById("downloadBtn");
+const recordTimer = document.getElementById("recordTimer");
+
+let frameImage = null;
 
 let bgCameraStream = null;
 let frameCameraStream = null;
 
-let overlayImage = null;
+let recording = false;
+let mediaRecorder = null;
+let recordedChunks = [];
+let recordStart = 0;
+let timerInterval = null;
 
-let animationFrame = null;
-let exporting = false;
+let animationStarted = false;
 
-let audioContext = null;
-let audioDestination = null;
+const state = {
 
-let bgSource = null;
-let overlaySource = null;
-let bgCameraSource = null;
-let frameCameraSource = null;
-let musicSource = null;
+  frame: {
+    visible: true,
+    source: "none",
+    x: 0,
+    y: 0,
+    scale: .65,
+    rotation: 0,
+    style: "gold"
+  },
 
-let bgGain = null;
-let overlayGain = null;
-let bgCameraGain = null;
-let frameCameraGain = null;
-let musicGain = null;
+  magic: {
+    type: "none",
+    intensity: 70,
+    speed: 80,
+    size: 4
+  },
 
-let voiceNodes = [];
+  text: {
+    value: "",
+    size: 64,
+    color: "#ffffff",
+    x: 0,
+    y: 260,
+    animation: "none"
+  },
 
-let state = {
+  color: {
+    look: "original",
+    brightness: 0,
+    contrast: 0,
+    saturation: 0
+  },
 
-  bgSourceType: "none",
+  audio: {
+    bg: true,
+    frame: true,
+    bgVolume: 1,
+    frameVolume: 1,
+    musicVolume: .4
+  }
 
-  overlayType: "none",
-
-  frame: "none",
-
-  textEffect: "normal",
-
-  textAnimation: "none",
-
-  colorLook: "normal",
-
-  bgAudio: true,
-  overlayAudio: false,
-  bgCameraAudio: true,
-  frameCameraAudio: false,
-  musicEnabled: false,
-
-  bgVolume: 1,
-  overlayVolume: 1,
-  bgCameraVolume: 1,
-  frameCameraVolume: 1,
-  musicVolume: 0.35,
-
-  overlayScale: 0.45,
-  overlayX: 0,
-  overlayY: 0,
-  overlayRotation: 0,
-
-  frameX: 0.27,
-  frameY: 0,
-  frameScale: 0.4,
-  frameRotation: 0,
-  frameWidth: 10,
-
-  cameraX: 0,
-  cameraY: 0,
-  cameraScale: 0.45,
-
-  text: "Premium Text",
-  textFont: "Arial",
-  textSize: 70,
-  textWeight: "700",
-  textStyle: "normal",
-  textColor: "#ffffff",
-  textOutlineColor: "#000000",
-  textOutlineWidth: 3,
-  textOpacity: 1,
-  textX: 0.5,
-  textY: 0.82,
-  textRotation: 0,
-  letterSpacing: 0,
-
-  brightness: 100,
-  contrast: 100,
-  saturation: 100,
-  hue: 0,
-  blur: 0,
-  sepia: 0,
-
-  voiceEffect: "natural",
-  voicePitch: 0,
-  voiceWarmth: 50,
-  voiceClarity: 60,
-  voiceReverb: 0
 };
 
 
 /* =========================================================
-   TABS
-========================================================= */
+   Helpers
+   ========================================================= */
 
-document.querySelectorAll(".tab").forEach(btn => {
+function status(text){
+  statusEl.textContent = text;
+}
 
-  btn.addEventListener("click", () => {
+function clamp(v,min,max){
+  return Math.max(min,Math.min(max,v));
+}
 
-    document.querySelectorAll(".tab").forEach(x =>
-      x.classList.remove("active")
-    );
+function formatTime(sec){
+  sec = Math.floor(sec);
+  const m = String(Math.floor(sec / 60)).padStart(2,"0");
+  const s = String(sec % 60).padStart(2,"0");
+  return `${m}:${s}`;
+}
 
-    document.querySelectorAll(".tab-content").forEach(x =>
-      x.classList.remove("active")
-    );
+function setCanvasResolution(){
 
-    btn.classList.add("active");
+  const value = document.getElementById("resolution").value;
 
-    const tab = $("tab-" + btn.dataset.tab);
+  const [w,h] = value.split("x").map(Number);
 
-    if (tab) {
-      tab.classList.add("active");
-    }
-  });
-});
+  canvas.width = w;
+  canvas.height = h;
+
+}
+
+function isVideoReady(video){
+
+  return video &&
+    video.readyState >= 2 &&
+    video.videoWidth > 0 &&
+    video.videoHeight > 0;
+
+}
+
+function drawContain(source,x,y,w,h){
+
+  if(!source) return;
+
+  let sw = source.videoWidth || source.naturalWidth;
+  let sh = source.videoHeight || source.naturalHeight;
+
+  if(!sw || !sh) return;
+
+  const ratio = Math.min(w/sw,h/sh);
+
+  const dw = sw * ratio;
+  const dh = sh * ratio;
+
+  const dx = x + (w-dw)/2;
+  const dy = y + (h-dh)/2;
+
+  ctx.drawImage(source,dx,dy,dw,dh);
+
+}
 
 
 /* =========================================================
-   HELPERS
-========================================================= */
+   File Upload
+   ========================================================= */
 
-function clamp(v, min, max) {
-  return Math.max(min, Math.min(max, v));
-}
+bgFile.addEventListener("change",()=>{
 
-function formatTime(sec) {
+  const file = bgFile.files[0];
 
-  sec = Number(sec) || 0;
-
-  const m = Math.floor(sec / 60);
-  const s = Math.floor(sec % 60);
-
-  return String(m).padStart(2, "0") +
-    ":" +
-    String(s).padStart(2, "0");
-}
-
-function showStatus(text) {
-  $("previewStatus").textContent = text;
-}
-
-function setProgress(v) {
-  $("progressBar").style.width =
-    clamp(v, 0, 100) + "%";
-}
-
-
-/* =========================================================
-   BACKGROUND VIDEO
-========================================================= */
-
-$("bgVideoInput").addEventListener("change", e => {
-
-  const file = e.target.files[0];
-
-  if (!file) return;
-
-  stopBgCamera();
+  if(!file) return;
 
   bgVideo.src = URL.createObjectURL(file);
   bgVideo.load();
 
-  state.bgSourceType = "video";
+  bgVideo.onloadedmetadata = ()=>{
 
-  bgVideo.onloadedmetadata = () => {
+    bgVideo.currentTime = 0;
+    emptyPreview.style.display = "none";
 
-    $("duration").textContent =
-      formatTime(bgVideo.duration);
+    status("Background Video Ready");
 
-    $("emptyPreview").style.display = "none";
+    bgVideo.play().catch(()=>{});
 
-    canvas.width = 1280;
-    canvas.height = 720;
-
-    showStatus("Background video loaded");
-
-    bgVideo.play().catch(() => {});
-
-    startRender();
   };
+
 });
 
 
-$("removeBgBtn").addEventListener("click", () => {
+frameFile.addEventListener("change",()=>{
 
-  bgVideo.pause();
-  bgVideo.removeAttribute("src");
-  bgVideo.load();
+  const file = frameFile.files[0];
 
-  stopBgCamera();
-
-  state.bgSourceType = "none";
-
-  $("emptyPreview").style.display = "flex";
-
-  showStatus("No media loaded");
-});
-
-
-$("replaceBgBtn").addEventListener("click", () => {
-  $("bgVideoInput").click();
-});
-
-
-/* =========================================================
-   OVERLAY PHOTO / VIDEO
-========================================================= */
-
-$("overlayInput").addEventListener("change", e => {
-
-  const file = e.target.files[0];
-
-  if (!file) return;
+  if(!file) return;
 
   const url = URL.createObjectURL(file);
 
-  if (file.type.startsWith("video/")) {
+  if(file.type.startsWith("image/")){
 
-    overlayImage = null;
+    frameImage = new Image();
 
-    overlayVideo.src = url;
-    overlayVideo.load();
+    frameImage.onload = ()=>{
 
-    state.overlayType = "video";
+      state.frame.source = "image";
+      state.frame.visible = true;
 
-    overlayVideo.onloadedmetadata = () => {
-      overlayVideo.currentTime = 0;
-      overlayVideo.play().catch(() => {});
-      showStatus("Frame video loaded");
-      startRender();
+      status("Frame Photo Ready");
+
     };
 
-  } else if (file.type.startsWith("image/")) {
+    frameImage.src = url;
 
-    overlayImage = new Image();
+  }else if(file.type.startsWith("video/")){
 
-    overlayImage.onload = () => {
+    frameVideo.src = url;
+    frameVideo.loop = true;
+    frameVideo.muted = true;
+    frameVideo.load();
 
-      state.overlayType = "image";
+    frameVideo.onloadedmetadata = ()=>{
 
-      showStatus("Frame image loaded");
+      state.frame.source = "video";
+      state.frame.visible = true;
 
-      startRender();
+      frameVideo.play().catch(()=>{});
+
+      status("Frame Video Ready");
+
     };
 
-    overlayImage.src = url;
   }
+
+});
+
+
+musicFile.addEventListener("change",()=>{
+
+  const file = musicFile.files[0];
+
+  if(!file) return;
+
+  const music = document.getElementById("musicAudio");
+
+  music.src = URL.createObjectURL(file);
+  music.loop = true;
+
+  status("Music Ready");
+
 });
 
 
 /* =========================================================
-   PLAY / PAUSE
-========================================================= */
+   Play
+   ========================================================= */
 
-$("playBtn").addEventListener("click", () => {
+document.getElementById("playBtn").onclick = ()=>{
 
-  const isPlaying =
-    !bgVideo.paused &&
-    !bgVideo.ended;
-
-  if (isPlaying) {
-
-    bgVideo.pause();
-
-    if (!overlayVideo.paused)
-      overlayVideo.pause();
-
-    $("playBtn").textContent = "▶";
-
-  } else {
-
-    bgVideo.play().catch(() => {});
-
-    if (state.overlayType === "video")
-      overlayVideo.play().catch(() => {});
-
-    $("playBtn").textContent = "⏸";
+  if(isVideoReady(bgVideo)){
+    bgVideo.play().catch(()=>{});
   }
-});
 
-
-$("timeline").addEventListener("input", e => {
-
-  const duration = bgVideo.duration;
-
-  if (!duration || !isFinite(duration))
-    return;
-
-  const t =
-    Number(e.target.value) / 100 * duration;
-
-  bgVideo.currentTime = t;
-
-  if (
-    state.overlayType === "video" &&
-    overlayVideo.readyState >= 2
-  ) {
-    try {
-      overlayVideo.currentTime =
-        Math.min(t, overlayVideo.duration || t);
-    } catch (_) {}
+  if(isVideoReady(frameVideo)){
+    frameVideo.play().catch(()=>{});
   }
-});
 
-
-$("mutePreviewBtn").addEventListener("click", () => {
-
-  bgVideo.muted = !bgVideo.muted;
-
-  $("mutePreviewBtn").textContent =
-    bgVideo.muted ? "🔇" : "🔊";
-});
-
-
-$("fullscreenBtn").addEventListener("click", () => {
-
-  const el = $("stageWrap");
-
-  if (el.requestFullscreen)
-    el.requestFullscreen();
-});
+};
 
 
 /* =========================================================
-   CAMERA DEVICE LIST
-========================================================= */
+   Camera
+   ========================================================= */
 
-async function loadDevices() {
+async function startCamera(target){
 
-  if (!navigator.mediaDevices?.enumerateDevices)
-    return;
+  try{
 
-  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
 
-    const devices =
-      await navigator.mediaDevices.enumerateDevices();
+      video:{
+        width:{ideal:1920},
+        height:{ideal:1080},
+        facingMode:"user"
+      },
 
-    const cameras =
-      devices.filter(d => d.kind === "videoinput");
+      audio:true
 
-    const mics =
-      devices.filter(d => d.kind === "audioinput");
+    });
 
-    fillSelect($("bgCameraSelect"), cameras);
-    fillSelect($("frameCameraSelect"), cameras);
+    if(target === "background"){
 
-    fillSelect($("bgMicSelect"), mics);
-    fillSelect($("frameMicSelect"), mics);
+      bgCameraStream = stream;
+      bgCameraVideo.srcObject = stream;
+      bgCameraVideo.muted = true;
 
-  } catch (err) {
+      state.bgCamera = true;
 
-    console.warn("Device enumeration failed", err);
-  }
-}
+      await bgCameraVideo.play();
 
+      emptyPreview.style.display = "none";
 
-function fillSelect(select, devices) {
+      status("Background Camera ON");
 
-  select.innerHTML = "";
+    }else{
 
-  devices.forEach((device, index) => {
+      frameCameraStream = stream;
+      frameCameraVideo.srcObject = stream;
+      frameCameraVideo.muted = true;
 
-    const option =
-      document.createElement("option");
+      state.frame.source = "camera";
+      state.frame.visible = true;
 
-    option.value = device.deviceId;
+      await frameCameraVideo.play();
 
-    option.textContent =
-      device.label ||
-      `${device.kind === "videoinput" ? "Camera" : "Microphone"} ${index + 1}`;
+      status("Frame Camera ON");
 
-    select.appendChild(option);
-  });
-}
+    }
 
+  }catch(error){
 
-/* =========================================================
-   CAMERA START
-========================================================= */
+    console.error(error);
 
-async function getCameraStream(cameraId, micId) {
-
-  const videoConstraints =
-    cameraId
-      ? { deviceId: { exact: cameraId } }
-      : true;
-
-  const audioConstraints =
-    micId
-      ? { deviceId: { exact: micId } }
-      : true;
-
-  return navigator.mediaDevices.getUserMedia({
-    video: videoConstraints,
-    audio: audioConstraints
-  });
-}
-
-
-$("startBgCamera").addEventListener("click", async () => {
-
-  try {
-
-    stopBgCamera();
-
-    bgCameraStream =
-      await getCameraStream(
-        $("bgCameraSelect").value,
-        $("bgMicSelect").value
-      );
-
-    bgCameraVideo.srcObject =
-      bgCameraStream;
-
-    bgCameraVideo.muted = true;
-
-    await bgCameraVideo.play();
-
-    state.bgSourceType = "camera";
-
-    $("emptyPreview").style.display = "none";
-
-    await loadDevices();
-
-    showStatus("Background Live Camera active");
-
-    startRender();
-
-    await setupAudio();
-
-  } catch (err) {
+    status("Camera permission/error");
 
     alert(
-      "Background Camera शुरू नहीं हो सका।\n\n" +
-      err.message
+      "Camera चालू नहीं हो सका। Browser में Camera permission Allow करें।"
     );
+
   }
-});
+
+}
 
 
-$("stopBgCamera").addEventListener("click", stopBgCamera);
+document.getElementById("startBgCamera").onclick =
+  ()=>startCamera("background");
+
+document.getElementById("startFrameCamera").onclick =
+  ()=>startCamera("frame");
 
 
-function stopBgCamera() {
+document.getElementById("stopCameras").onclick = ()=>{
 
-  if (bgCameraStream) {
+  [bgCameraStream,frameCameraStream].forEach(stream=>{
 
-    bgCameraStream
-      .getTracks()
-      .forEach(track => track.stop());
+    if(stream){
 
-    bgCameraStream = null;
-  }
+      stream.getTracks().forEach(track=>track.stop());
+
+    }
+
+  });
+
+  bgCameraStream = null;
+  frameCameraStream = null;
 
   bgCameraVideo.srcObject = null;
-
-  if (state.bgSourceType === "camera")
-    state.bgSourceType = "none";
-}
-
-
-/* =========================================================
-   FRAME CAMERA
-========================================================= */
-
-$("startFrameCamera").addEventListener("click", async () => {
-
-  try {
-
-    stopFrameCamera();
-
-    frameCameraStream =
-      await getCameraStream(
-        $("frameCameraSelect").value,
-        $("frameMicSelect").value
-      );
-
-    frameCameraVideo.srcObject =
-      frameCameraStream;
-
-    frameCameraVideo.muted = true;
-
-    await frameCameraVideo.play();
-
-    state.overlayType = "camera";
-
-    $("emptyPreview").style.display = "none";
-
-    await loadDevices();
-
-    showStatus("Frame Live Camera active");
-
-    await setupAudio();
-
-    startRender();
-
-  } catch (err) {
-
-    alert(
-      "Frame Camera शुरू नहीं हो सका।\n\n" +
-      err.message
-    );
-  }
-});
-
-
-$("stopFrameCamera").addEventListener(
-  "click",
-  stopFrameCamera
-);
-
-
-function stopFrameCamera() {
-
-  if (frameCameraStream) {
-
-    frameCameraStream
-      .getTracks()
-      .forEach(track => track.stop());
-
-    frameCameraStream = null;
-  }
-
   frameCameraVideo.srcObject = null;
 
-  if (state.overlayType === "camera")
-    state.overlayType = "none";
-}
+  state.bgCamera = false;
+
+  if(state.frame.source === "camera"){
+    state.frame.source = "none";
+  }
+
+  status("Cameras Stopped");
+
+};
 
 
 /* =========================================================
-   FRAME SELECTION
-========================================================= */
+   Frame Controls
+   ========================================================= */
 
-document.querySelectorAll(".frame-btn").forEach(btn => {
+document.getElementById("frameUsePhoto").onclick = ()=>{
 
-  btn.addEventListener("click", () => {
+  if(frameImage){
 
-    document.querySelectorAll(".frame-btn")
-      .forEach(x => x.classList.remove("active"));
+    state.frame.source = "image";
+    state.frame.visible = true;
+
+  }else if(isVideoReady(frameVideo)){
+
+    state.frame.source = "video";
+    state.frame.visible = true;
+
+  }else{
+
+    alert("पहले Photo या Video चुनें।");
+
+  }
+
+};
+
+
+document.getElementById("frameUseCamera").onclick = ()=>{
+
+  if(frameCameraStream){
+
+    state.frame.source = "camera";
+    state.frame.visible = true;
+
+  }else{
+
+    startCamera("frame");
+
+  }
+
+};
+
+
+document.getElementById("hideFrame").onclick = ()=>{
+
+  state.frame.visible = false;
+
+};
+
+
+document.querySelectorAll(".frame-choice").forEach(btn=>{
+
+  btn.onclick = ()=>{
+
+    document
+      .querySelectorAll(".frame-choice")
+      .forEach(x=>x.classList.remove("active"));
 
     btn.classList.add("active");
 
-    state.frame = btn.dataset.frame;
+    state.frame.style = btn.dataset.frame;
 
-    startRender();
-  });
-});
-
-
-/* =========================================================
-   FRAME CONTROLS
-========================================================= */
-
-function bindRange(id, key, parser = Number) {
-
-  const el = $(id);
-
-  if (!el) return;
-
-  el.addEventListener("input", () => {
-
-    state[key] =
-      parser(el.value);
-
-    startRender();
-  });
-}
-
-
-bindRange("overlayScale", "overlayScale");
-bindRange("overlayRotation", "overlayRotation");
-bindRange("frameX", "frameX");
-bindRange("frameY", "frameY");
-bindRange("frameScale", "frameScale");
-bindRange("frameRotation", "frameRotation");
-bindRange("frameWidth", "frameWidth");
-
-bindRange("cameraX", "cameraX");
-bindRange("cameraY", "cameraY");
-bindRange("cameraScale", "cameraScale");
-
-
-/* =========================================================
-   TEXT
-========================================================= */
-
-$("textInput").addEventListener("input", e => {
-  state.text = e.target.value;
-  startRender();
-});
-
-$("textFont").addEventListener("change", e => {
-  state.textFont = e.target.value;
-  startRender();
-});
-
-$("textSize").addEventListener("input", e => {
-  state.textSize = Number(e.target.value);
-  startRender();
-});
-
-$("textWeight").addEventListener("change", e => {
-  state.textWeight = e.target.value;
-  startRender();
-});
-
-$("textStyle").addEventListener("change", e => {
-  state.textStyle = e.target.value;
-  startRender();
-});
-
-$("textColor").addEventListener("input", e => {
-  state.textColor = e.target.value;
-  startRender();
-});
-
-$("textOutlineColor").addEventListener("input", e => {
-  state.textOutlineColor = e.target.value;
-  startRender();
-});
-
-$("textOutlineWidth").addEventListener("input", e => {
-  state.textOutlineWidth = Number(e.target.value);
-  startRender();
-});
-
-$("textOpacity").addEventListener("input", e => {
-  state.textOpacity = Number(e.target.value);
-  startRender();
-});
-
-$("textAnimation").addEventListener("change", e => {
-  state.textAnimation = e.target.value;
-  startRender();
-});
-
-bindRange("textX", "textX");
-bindRange("textY", "textY");
-bindRange("textRotation", "textRotation");
-bindRange("letterSpacing", "letterSpacing");
-
-
-document.querySelectorAll(".effect-chip")
-  .forEach(btn => {
-
-    btn.addEventListener("click", () => {
-
-      document.querySelectorAll(".effect-chip")
-        .forEach(x => x.classList.remove("active"));
-
-      btn.classList.add("active");
-
-      state.textEffect =
-        btn.dataset.effect;
-
-      startRender();
-    });
-  });
-
-
-/* =========================================================
-   COLOR LOOKS
-========================================================= */
-
-document.querySelectorAll("[data-look]")
-  .forEach(btn => {
-
-    btn.addEventListener("click", () => {
-
-      state.colorLook =
-        btn.dataset.look;
-
-      applyLookDefaults(
-        state.colorLook
-      );
-
-      startRender();
-    });
-  });
-
-
-function applyLookDefaults(look) {
-
-  const presets = {
-
-    normal: [100,100,100,0,0,0],
-
-    cinematic: [102,118,112,-5,0,0],
-
-    vivid: [105,108,145,0,0,0],
-
-    hdr: [108,132,135,0,0,0],
-
-    portrait: [105,106,108,2,0,0],
-
-    warm: [104,105,112,0,0,8],
-
-    cool: [101,105,110,0,0,0],
-
-    film: [98,112,92,-3,0,12],
-
-    sunset: [108,110,125,-4,0,8],
-
-    night: [85,115,105,-8,1,0],
-
-    mono: [105,120,0,0,0,0],
-
-    dream: [108,90,118,4,1,0]
   };
 
-  const p =
-    presets[look] ||
-    presets.normal;
-
-  state.brightness = p[0];
-  state.contrast = p[1];
-  state.saturation = p[2];
-  state.hue = p[3];
-  state.blur = p[4];
-  state.sepia = p[5];
-
-  $("brightness").value = p[0];
-  $("contrast").value = p[1];
-  $("saturation").value = p[2];
-  $("hue").value = p[3];
-  $("blur").value = p[4];
-  $("sepia").value = p[5];
-}
-
-
-["brightness","contrast","saturation",
- "hue","blur","sepia"]
-.forEach(id => {
-
-  $(id).addEventListener("input", () => {
-
-    state[id] =
-      Number($(id).value);
-
-    startRender();
-  });
 });
 
 
-/* =========================================================
-   AUDIO CONTROLS
-========================================================= */
+function updateRange(id,key){
 
-$("bgAudioEnabled").addEventListener("change", async e => {
+  document.getElementById(id).addEventListener("input",e=>{
 
-  state.bgAudio = e.target.checked;
+    state.frame[key] = Number(e.target.value);
 
-  await setupAudio();
-  updateAudio();
-});
-
-
-$("overlayAudioEnabled").addEventListener("change", async e => {
-
-  state.overlayAudio = e.target.checked;
-
-  await setupAudio();
-  updateAudio();
-});
-
-
-$("bgCameraAudio").addEventListener("change", async e => {
-
-  state.bgCameraAudio = e.target.checked;
-
-  await setupAudio();
-  updateAudio();
-});
-
-
-$("frameCameraAudio").addEventListener("change", async e => {
-
-  state.frameCameraAudio = e.target.checked;
-
-  await setupAudio();
-  updateAudio();
-});
-
-
-$("musicEnabled").addEventListener("change", async e => {
-
-  state.musicEnabled = e.target.checked;
-
-  await setupAudio();
-  updateAudio();
-});
-
-
-function bindAudio(id, key) {
-
-  $(id).addEventListener("input", () => {
-
-    state[key] =
-      Number($(id).value);
-
-    updateAudio();
-  });
-}
-
-
-bindAudio("bgVolume","bgVolume");
-bindAudio("overlayVolume","overlayVolume");
-bindAudio("bgCameraVolume","bgCameraVolume");
-bindAudio("frameCameraVolume","frameCameraVolume");
-bindAudio("musicVolume","musicVolume");
-
-
-/* =========================================================
-   MUSIC
-========================================================= */
-
-$("musicInput").addEventListener("change", e => {
-
-  const file = e.target.files[0];
-
-  if (!file) return;
-
-  musicAudio.src =
-    URL.createObjectURL(file);
-
-  musicAudio.loop = true;
-
-  musicAudio.load();
-
-  state.musicEnabled = true;
-
-  $("musicEnabled").checked = true;
-
-  musicAudio.play().catch(() => {});
-
-  setupAudio().then(updateAudio);
-});
-
-
-/* =========================================================
-   AUDIO GRAPH
-========================================================= */
-
-async function setupAudio() {
-
-  if (!audioContext) {
-
-    audioContext =
-      new (window.AudioContext ||
-           window.webkitAudioContext)();
-
-    audioDestination =
-      audioContext.createMediaStreamDestination();
-  }
-
-  if (audioContext.state === "suspended") {
-
-    try {
-      await audioContext.resume();
-    } catch (_) {}
-  }
-
-  createAudioSourceOnce();
-
-  updateAudio();
-}
-
-
-function createAudioSourceOnce() {
-
-  if (!audioContext) return;
-
-  if (!bgSource && bgVideo) {
-
-    try {
-
-      bgSource =
-        audioContext.createMediaElementSource(bgVideo);
-
-      bgGain =
-        audioContext.createGain();
-
-      bgSource
-        .connect(bgGain)
-        .connect(audioDestination);
-
-      bgSource
-        .connect(audioContext.destination);
-
-    } catch (_) {}
-  }
-
-
-  if (!overlaySource && overlayVideo) {
-
-    try {
-
-      overlaySource =
-        audioContext.createMediaElementSource(
-          overlayVideo
-        );
-
-      overlayGain =
-        audioContext.createGain();
-
-      overlaySource
-        .connect(overlayGain)
-        .connect(audioDestination);
-
-      overlaySource
-        .connect(audioContext.destination);
-
-    } catch (_) {}
-  }
-
-
-  if (!bgCameraSource && bgCameraVideo) {
-
-    try {
-
-      bgCameraSource =
-        audioContext.createMediaStreamSource(
-          new MediaStream()
-        );
-
-    } catch (_) {}
-  }
-
-
-  if (!frameCameraSource && frameCameraVideo) {
-
-    try {
-
-      frameCameraSource =
-        audioContext.createMediaStreamSource(
-          new MediaStream()
-        );
-
-    } catch (_) {}
-  }
-
-
-  if (!musicSource && musicAudio) {
-
-    try {
-
-      musicSource =
-        audioContext.createMediaElementSource(
-          musicAudio
-        );
-
-      musicGain =
-        audioContext.createGain();
-
-      musicSource
-        .connect(musicGain)
-        .connect(audioDestination);
-
-      musicSource
-        .connect(audioContext.destination);
-
-    } catch (_) {}
-  }
-}
-
-
-function rebuildCameraAudio() {
-
-  if (!audioContext) return;
-
-  try {
-
-    if (bgCameraSource) {
-
-      try {
-        bgCameraSource.disconnect();
-      } catch (_) {}
-
-      bgCameraSource = null;
-    }
-
-    if (frameCameraSource) {
-
-      try {
-        frameCameraSource.disconnect();
-      } catch (_) {}
-
-      frameCameraSource = null;
-    }
-
-    if (
-      bgCameraStream &&
-      bgCameraStream.getAudioTracks().length
-    ) {
-
-      bgCameraSource =
-        audioContext.createMediaStreamSource(
-          bgCameraStream
-        );
-
-      const gain =
-        audioContext.createGain();
-
-      bgCameraGain = gain;
-
-      bgCameraSource
-        .connect(gain)
-        .connect(audioDestination);
-
-      gain.connect(
-        audioContext.destination
-      );
-    }
-
-    if (
-      frameCameraStream &&
-      frameCameraStream.getAudioTracks().length
-    ) {
-
-      frameCameraSource =
-        audioContext.createMediaStreamSource(
-          frameCameraStream
-        );
-
-      const gain =
-        audioContext.createGain();
-
-      frameCameraGain = gain;
-
-      frameCameraSource
-        .connect(gain)
-        .connect(audioDestination);
-
-      gain.connect(
-        audioContext.destination
-      );
-    }
-
-  } catch (err) {
-
-    console.warn(
-      "Camera audio setup failed",
-      err
-    );
-  }
-}
-
-
-function updateAudio() {
-
-  if (!audioContext) return;
-
-  if (bgGain) {
-
-    bgGain.gain.value =
-      state.bgAudio
-        ? state.bgVolume
-        : 0;
-  }
-
-  if (overlayGain) {
-
-    overlayGain.gain.value =
-      state.overlayAudio
-        ? state.overlayVolume
-        : 0;
-  }
-
-  if (bgCameraGain) {
-
-    bgCameraGain.gain.value =
-      state.bgCameraAudio
-        ? state.bgCameraVolume
-        : 0;
-  }
-
-  if (frameCameraGain) {
-
-    frameCameraGain.gain.value =
-      state.frameCameraAudio
-        ? state.frameCameraVolume
-        : 0;
-  }
-
-  if (musicGain) {
-
-    musicGain.gain.value =
-      state.musicEnabled
-        ? state.musicVolume
-        : 0;
-  }
-
-  setupVoiceEffect();
-}
-
-
-/* =========================================================
-   HUMAN-STYLE VOICE EFFECT
-========================================================= */
-
-async function setupVoiceEffect() {
-
-  if (!audioContext)
-    return;
-
-  voiceNodes.forEach(node => {
-
-    try {
-      node.disconnect();
-    } catch (_) {}
   });
 
-  voiceNodes = [];
-
-  /*
-    यह true AI voice conversion नहीं है।
-    यह natural-sounding DSP chain है:
-    EQ + filter + compression + reverb/delay.
-  */
-
-  const effect =
-    state.voiceEffect;
-
-  const targets = [];
-
-  if (bgGain) targets.push(bgGain);
-  if (overlayGain) targets.push(overlayGain);
-  if (bgCameraGain) targets.push(bgCameraGain);
-  if (frameCameraGain) targets.push(frameCameraGain);
-
-
-  let low = 80;
-  let high = 12000;
-
-  if (effect === "deep") {
-    low = 55;
-    high = 8500;
-  }
-
-  if (effect === "warm") {
-    low = 80;
-    high = 10000;
-  }
-
-  if (effect === "female") {
-    low = 120;
-    high = 15000;
-  }
-
-  if (effect === "young") {
-    low = 150;
-    high = 16000;
-  }
-
-  if (effect === "mature") {
-    low = 70;
-    high = 10000;
-  }
-
-  if (effect === "soft") {
-    low = 100;
-    high = 9000;
-  }
-
-  if (effect === "radio") {
-    low = 300;
-    high = 3500;
-  }
-
-
-  /*
-    Note:
-    Existing source nodes already feed the destination.
-    इसलिए aggressive graph rewiring नहीं किया जाता।
-    ये parameters voice character के लिए global EQ/filter
-    configuration की तैयारी रखते हैं।
-  */
-
-  voiceNodes.push({
-    effect,
-    low,
-    high
-  });
 }
+
+updateRange("frameX","x");
+updateRange("frameY","y");
+updateRange("frameScale","scale");
+updateRange("frameRotation","rotation");
+
+
+document.getElementById("centerFrame").onclick = ()=>{
+
+  state.frame.x = 0;
+  state.frame.y = 0;
+
+  document.getElementById("frameX").value = 0;
+  document.getElementById("frameY").value = 0;
+
+};
+
+
+document.getElementById("resetFrame").onclick = ()=>{
+
+  state.frame.x = 0;
+  state.frame.y = 0;
+  state.frame.scale = .65;
+  state.frame.rotation = 0;
+
+  document.getElementById("frameX").value = 0;
+  document.getElementById("frameY").value = 0;
+  document.getElementById("frameScale").value = .65;
+  document.getElementById("frameRotation").value = 0;
+
+};
 
 
 /* =========================================================
-   TEXT DRAWING
-========================================================= */
+   Magic
+   ========================================================= */
 
-function getAnimatedTextPosition(time) {
+document.querySelectorAll(".magic-choice").forEach(btn=>{
 
-  let x =
-    state.textX * canvas.width;
+  btn.onclick = ()=>{
 
-  let y =
-    state.textY * canvas.height;
+    document
+      .querySelectorAll(".magic-choice")
+      .forEach(x=>x.classList.remove("active"));
 
-  const duration =
-    bgVideo.duration || 10;
+    btn.classList.add("active");
 
-  const progress =
-    clamp(time / duration, 0, 1);
+    state.magic.type = btn.dataset.magic;
 
-  const loop =
-    (time % 4) / 4;
+  };
 
-  switch (state.textAnimation) {
-
-    case "left":
-      x =
-        ((time * 0.25) % 1.3 - 0.15)
-        * canvas.width;
-      break;
-
-    case "right":
-      x =
-        (1.15 - (time * 0.25) % 1.3)
-        * canvas.width;
-      break;
-
-    case "up":
-      y =
-        (1.2 - (time * 0.2) % 1.4)
-        * canvas.height;
-      break;
-
-    case "down":
-      y =
-        ((time * 0.2) % 1.4 - 0.2)
-        * canvas.height;
-      break;
-
-    case "float":
-      x +=
-        Math.sin(time * 1.3) * 25;
-
-      y +=
-        Math.sin(time * 2) * 12;
-      break;
-
-    case "wave":
-      y +=
-        Math.sin(time * 4) * 15;
-      break;
-
-    case "fade":
-      break;
-
-    case "zoom":
-      break;
-
-    case "bounce":
-      y -=
-        Math.abs(Math.sin(time * 3)) * 40;
-      break;
-
-    case "ticker":
-      x =
-        ((time * 0.3) % 1.5 - 0.25)
-        * canvas.width;
-      break;
-  }
-
-  return { x, y, progress, loop };
-}
+});
 
 
-function drawText(time) {
+document.getElementById("magicIntensity").oninput = e=>{
+  state.magic.intensity = Number(e.target.value);
+};
 
-  if (!state.text.trim())
-    return;
+document.getElementById("magicSpeed").oninput = e=>{
+  state.magic.speed = Number(e.target.value);
+};
 
-  const pos =
-    getAnimatedTextPosition(time);
-
-  let text =
-    state.text;
-
-  if (state.textAnimation === "typewriter") {
-
-    const count =
-      Math.floor(
-        (time % 6) /
-        6 *
-        text.length
-      );
-
-    text =
-      text.substring(0, count);
-  }
+document.getElementById("magicSize").oninput = e=>{
+  state.magic.size = Number(e.target.value);
+};
 
 
-  let scale = 1;
+/* =========================================================
+   Text
+   ========================================================= */
 
-  if (state.textAnimation === "zoom") {
+document.getElementById("textInput").oninput = e=>{
+  state.text.value = e.target.value;
+};
 
-    scale =
-      0.65 +
-      Math.min(
-        0.55,
-        (time % 2) / 2
-      );
-  }
+document.getElementById("textSize").oninput = e=>{
+  state.text.size = Number(e.target.value);
+};
+
+document.getElementById("textColor").oninput = e=>{
+  state.text.color = e.target.value;
+};
+
+document.getElementById("textX").oninput = e=>{
+  state.text.x = Number(e.target.value);
+};
+
+document.getElementById("textY").oninput = e=>{
+  state.text.y = Number(e.target.value);
+};
+
+document.getElementById("textAnimation").onchange = e=>{
+  state.text.animation = e.target.value;
+};
 
 
-  let alpha =
-    state.textOpacity;
+/* =========================================================
+   Color
+   ========================================================= */
 
-  if (state.textAnimation === "fade") {
+document.querySelectorAll("[data-look]").forEach(btn=>{
 
-    alpha =
-      0.35 +
-      0.65 *
-      ((Math.sin(time * 2) + 1) / 2);
-  }
+  btn.onclick = ()=>{
 
+    state.color.look = btn.dataset.look;
+
+  };
+
+});
+
+document.getElementById("brightness").oninput = e=>{
+  state.color.brightness = Number(e.target.value);
+};
+
+document.getElementById("contrast").oninput = e=>{
+  state.color.contrast = Number(e.target.value);
+};
+
+document.getElementById("saturation").oninput = e=>{
+  state.color.saturation = Number(e.target.value);
+};
+
+
+/* =========================================================
+   Audio Controls
+   ========================================================= */
+
+document.getElementById("bgAudioOn").onchange = e=>{
+  state.audio.bg = e.target.checked;
+};
+
+document.getElementById("frameAudioOn").onchange = e=>{
+  state.audio.frame = e.target.checked;
+};
+
+document.getElementById("bgVolume").oninput = e=>{
+  state.audio.bgVolume = Number(e.target.value)/100;
+};
+
+document.getElementById("frameVolume").oninput = e=>{
+  state.audio.frameVolume = Number(e.target.value)/100;
+};
+
+document.getElementById("musicVolume").oninput = e=>{
+  state.audio.musicVolume = Number(e.target.value)/100;
+};
+
+
+/* =========================================================
+   Canvas Background
+   ========================================================= */
+
+function drawBackground(){
+
+  const W = canvas.width;
+  const H = canvas.height;
 
   ctx.save();
 
-  ctx.translate(pos.x, pos.y);
+  const filter = buildColorFilter();
+
+  ctx.filter = filter;
+
+  if(state.bgCamera && isVideoReady(bgCameraVideo)){
+
+    drawContain(bgCameraVideo,0,0,W,H);
+
+  }else if(isVideoReady(bgVideo)){
+
+    drawContain(bgVideo,0,0,W,H);
+
+  }else{
+
+    const g = ctx.createLinearGradient(0,0,W,H);
+
+    g.addColorStop(0,"#080b16");
+    g.addColorStop(1,"#15100b");
+
+    ctx.fillStyle = g;
+    ctx.fillRect(0,0,W,H);
+
+  }
+
+  ctx.restore();
+
+}
+
+
+function buildColorFilter(){
+
+  let brightness = 100 + state.color.brightness;
+
+  let contrast = 100 + state.color.contrast;
+
+  let saturation = 100 + state.color.saturation;
+
+  let filter =
+    `brightness(${brightness}%) ` +
+    `contrast(${contrast}%) ` +
+    `saturate(${saturation}%)`;
+
+  switch(state.color.look){
+
+    case "cinematic":
+      filter += " saturate(115%) contrast(110%)";
+      break;
+
+    case "vivid":
+      filter += " saturate(145%) contrast(108%)";
+      break;
+
+    case "warm":
+      filter += " sepia(12%) saturate(120%)";
+      break;
+
+    case "cool":
+      filter += " hue-rotate(12deg) saturate(110%)";
+      break;
+
+    case "dream":
+      filter += " brightness(108%) saturate(115%) blur(.15px)";
+      break;
+
+    case "film":
+      filter += " contrast(112%) saturate(88%) sepia(8%)";
+      break;
+
+    case "bw":
+      filter += " grayscale(100%)";
+      break;
+
+  }
+
+  return filter;
+
+}
+
+
+/* =========================================================
+   Frame Rendering
+   ========================================================= */
+
+function getFrameSource(){
+
+  if(state.frame.source === "image")
+    return frameImage;
+
+  if(state.frame.source === "video")
+    return frameVideo;
+
+  if(state.frame.source === "camera")
+    return frameCameraVideo;
+
+  return null;
+
+}
+
+
+function drawFrame(){
+
+  if(!state.frame.visible) return;
+
+  const source = getFrameSource();
+
+  if(!source) return;
+
+  const W = canvas.width;
+  const H = canvas.height;
+
+  const baseW = Math.min(W * .52,760);
+  const baseH = baseW * .56;
+
+  const w = baseW * state.frame.scale;
+  const h = baseH * state.frame.scale;
+
+  const cx = W/2 + state.frame.x;
+  const cy = H/2 + state.frame.y;
+
+  ctx.save();
+
+  ctx.translate(cx,cy);
 
   ctx.rotate(
-    state.textRotation *
-    Math.PI / 180
+    state.frame.rotation * Math.PI / 180
   );
 
-  ctx.scale(scale, scale);
-
-  const font =
-    `${state.textStyle} ${state.textWeight} ${state.textSize}px "${state.textFont}"`;
-
-  ctx.font = font;
-
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-
-  ctx.globalAlpha = alpha;
-
-  const effect =
-    state.textEffect;
-
-
-  /* shadow */
-
-  if (
-    effect === "shadow" ||
-    effect === "glow" ||
-    effect === "neon"
-  ) {
-
-    ctx.shadowBlur =
-      effect === "neon" ? 22 : 12;
-
-    ctx.shadowColor =
-      effect === "neon"
-        ? "#00eaff"
-        : "rgba(0,0,0,.85)";
-  }
-
-
-  /* gradient */
-
-  let fillStyle =
-    state.textColor;
-
-  if (
-    effect === "gradient" ||
-    effect === "rainbow" ||
-    effect === "gold"
-  ) {
-
-    const g =
-      ctx.createLinearGradient(
-        -250,
-        0,
-        250,
-        0
-      );
-
-    if (effect === "gold") {
-
-      g.addColorStop(0, "#8f6b24");
-      g.addColorStop(.25, "#fff1a8");
-      g.addColorStop(.5, "#d8ad47");
-      g.addColorStop(.75, "#fff4ae");
-      g.addColorStop(1, "#8f6b24");
-
-    } else if (effect === "rainbow") {
-
-      g.addColorStop(0, "#ff315b");
-      g.addColorStop(.25, "#ffcc33");
-      g.addColorStop(.5, "#27e67a");
-      g.addColorStop(.75, "#20bfff");
-      g.addColorStop(1, "#9a5cff");
-
-    } else {
-
-      g.addColorStop(0, "#ffffff");
-      g.addColorStop(.5, "#7c5cff");
-      g.addColorStop(1, "#00eaff");
-    }
-
-    fillStyle = g;
-  }
-
-
-  /* outline */
-
-  if (
-    effect === "outline" ||
-    effect === "neon" ||
-    effect === "gold"
-  ) {
-
-    ctx.lineJoin = "round";
-
-    ctx.lineWidth =
-      state.textOutlineWidth;
-
-    ctx.strokeStyle =
-      effect === "neon"
-        ? "#00eaff"
-        : state.textOutlineColor;
-
-    ctx.strokeText(
-      text,
-      0,
-      0
-    );
-  }
-
-
-  ctx.fillStyle = fillStyle;
-
-  /*
-    Letter spacing का browser canvas native support नहीं है,
-    इसलिए normal drawText किया जाता है।
-  */
-
-  ctx.fillText(
-    text,
-    0,
-    0
-  );
-
-  ctx.restore();
-}
-
-
-/* =========================================================
-   COLOR FILTER
-========================================================= */
-
-function buildFilter() {
-
-  return `
-    brightness(${state.brightness}%)
-    contrast(${state.contrast}%)
-    saturate(${state.saturation}%)
-    hue-rotate(${state.hue}deg)
-    blur(${state.blur}px)
-    sepia(${state.sepia}%)
-  `;
-}
-
-
-/* =========================================================
-   MEDIA DRAW
-========================================================= */
-
-function drawCover(video, x, y, w, h) {
-
-  if (
-    !video ||
-    video.readyState < 2 ||
-    !video.videoWidth
-  ) return;
-
-  const vw = video.videoWidth;
-  const vh = video.videoHeight;
-
-  const scale =
-    Math.max(w / vw, h / vh);
-
-  const dw = vw * scale;
-  const dh = vh * scale;
-
-  const dx =
-    x + (w - dw) / 2;
-
-  const dy =
-    y + (h - dh) / 2;
-
-  ctx.drawImage(
-    video,
-    dx,
-    dy,
-    dw,
-    dh
-  );
-}
-
-
-function drawContain(media, x, y, w, h) {
-
-  if (
-    !media ||
-    media.readyState < 2
-  ) return;
-
-  const vw =
-    media.videoWidth ||
-    media.naturalWidth;
-
-  const vh =
-    media.videoHeight ||
-    media.naturalHeight;
-
-  if (!vw || !vh)
-    return;
-
-  const scale =
-    Math.min(w / vw, h / vh);
-
-  const dw =
-    vw * scale;
-
-  const dh =
-    vh * scale;
-
-  const dx =
-    x + (w - dw) / 2;
-
-  const dy =
-    y + (h - dh) / 2;
-
-  ctx.drawImage(
-    media,
-    dx,
-    dy,
-    dw,
-    dh
-  );
-}
-
-
-/* =========================================================
-   FRAME DRAWING
-========================================================= */
-
-function roundedRect(
-  ctx,
-  x,
-  y,
-  w,
-  h,
-  r
-) {
-
-  r =
-    Math.min(
-      r,
-      Math.abs(w) / 2,
-      Math.abs(h) / 2
-    );
-
-  ctx.beginPath();
-
-  ctx.moveTo(x + r, y);
-
-  ctx.arcTo(
-    x + w,
-    y,
-    x + w,
-    y + h,
-    r
-  );
-
-  ctx.arcTo(
-    x + w,
-    y + h,
-    x,
-    y + h,
-    r
-  );
-
-  ctx.arcTo(
-    x,
-    y + h,
-    x,
-    y,
-    r
-  );
-
-  ctx.arcTo(
-    x,
-    y,
-    x + w,
-    y,
-    r
-  );
-
-  ctx.closePath();
-}
-
-
-function drawFrameBorder(x, y, w, h) {
-
-  const f =
-    state.frame;
-
-  if (f === "none")
-    return;
+  drawFrameDecoration(w,h,state.frame.style);
 
   ctx.save();
 
-  let radius = 18;
+  clipFrame(w,h,state.frame.style);
 
-  if (f === "circle")
-    radius = Math.min(w, h) / 2;
+  ctx.filter = "none";
 
-  if (f === "heart") {
-
-    ctx.strokeStyle = "#ff3d73";
-    ctx.lineWidth =
-      state.frameWidth;
-
-    ctx.shadowColor = "#ff3d73";
-    ctx.shadowBlur = 18;
-
-    ctx.beginPath();
-
-    ctx.arc(
-      x + w * .32,
-      y + h * .3,
-      w * .22,
-      Math.PI * .8,
-      Math.PI * 2.1
-    );
-
-    ctx.arc(
-      x + w * .68,
-      y + h * .3,
-      w * .22,
-      Math.PI * 1,
-      Math.PI * 2.3
-    );
-
-    ctx.lineTo(
-      x + w / 2,
-      y + h
-    );
-
-    ctx.closePath();
-
-    ctx.stroke();
-
-    ctx.restore();
-
-    return;
-  }
-
-
-  if (f === "rainbow") {
-
-    const g =
-      ctx.createLinearGradient(
-        x,
-        y,
-        x + w,
-        y + h
-      );
-
-    g.addColorStop(0,"#ff1744");
-    g.addColorStop(.2,"#ff9800");
-    g.addColorStop(.4,"#ffee00");
-    g.addColorStop(.6,"#00e676");
-    g.addColorStop(.8,"#00b0ff");
-    g.addColorStop(1,"#9c27ff");
-
-    ctx.strokeStyle = g;
-
-    ctx.lineWidth =
-      state.frameWidth;
-
-    ctx.shadowColor =
-      "#00eaff";
-
-    ctx.shadowBlur = 12;
-
-  } else if (f === "neon") {
-
-    ctx.strokeStyle =
-      "#00eaff";
-
-    ctx.lineWidth =
-      state.frameWidth;
-
-    ctx.shadowColor =
-      "#7c5cff";
-
-    ctx.shadowBlur = 24;
-
-  } else if (f === "gold") {
-
-    const g =
-      ctx.createLinearGradient(
-        x,
-        y,
-        x + w,
-        y + h
-      );
-
-    g.addColorStop(0,"#7d5b20");
-    g.addColorStop(.25,"#fff0a0");
-    g.addColorStop(.5,"#c9962d");
-    g.addColorStop(.75,"#fff3a3");
-    g.addColorStop(1,"#6f4d17");
-
-    ctx.strokeStyle = g;
-
-    ctx.lineWidth =
-      state.frameWidth;
-
-    ctx.shadowColor =
-      "#d6a84f";
-
-    ctx.shadowBlur = 15;
-
-  } else if (f === "glass") {
-
-    ctx.strokeStyle =
-      "rgba(255,255,255,.8)";
-
-    ctx.lineWidth =
-      state.frameWidth;
-
-    ctx.shadowColor =
-      "#8deaff";
-
-    ctx.shadowBlur = 20;
-
-  } else if (f === "cyber") {
-
-    ctx.strokeStyle =
-      "#8b5cff";
-
-    ctx.lineWidth =
-      state.frameWidth;
-
-    ctx.shadowColor =
-      "#00eaff";
-
-    ctx.shadowBlur = 20;
-
-  } else if (f === "fire") {
-
-    ctx.strokeStyle =
-      "#ff531a";
-
-    ctx.lineWidth =
-      state.frameWidth;
-
-    ctx.shadowColor =
-      "#ff9d00";
-
-    ctx.shadowBlur = 25;
-
-  } else if (f === "ice") {
-
-    ctx.strokeStyle =
-      "#8eeaff";
-
-    ctx.lineWidth =
-      state.frameWidth;
-
-    ctx.shadowColor =
-      "#00cfff";
-
-    ctx.shadowBlur = 20;
-
-  } else if (f === "film") {
-
-    ctx.strokeStyle =
-      "#f4f4f4";
-
-    ctx.lineWidth =
-      state.frameWidth;
-
-  } else if (f === "phone") {
-
-    ctx.strokeStyle =
-      "#151515";
-
-    ctx.lineWidth =
-      state.frameWidth + 5;
-
-    radius = 28;
-
-  } else if (f === "tv") {
-
-    ctx.strokeStyle =
-      "#5d6470";
-
-    ctx.lineWidth =
-      state.frameWidth + 6;
-
-    radius = 8;
-
-  } else if (f === "circle") {
-
-    ctx.strokeStyle =
-      "#ffffff";
-
-    ctx.lineWidth =
-      state.frameWidth;
-
-    radius =
-      Math.min(w,h) / 2;
-
-  } else if (f === "premium") {
-
-    const g =
-      ctx.createLinearGradient(
-        x,
-        y,
-        x + w,
-        y + h
-      );
-
-    g.addColorStop(0,"#805f1d");
-    g.addColorStop(.2,"#fff0a5");
-    g.addColorStop(.45,"#c99a35");
-    g.addColorStop(.7,"#fff2aa");
-    g.addColorStop(1,"#765215");
-
-    ctx.strokeStyle = g;
-
-    ctx.lineWidth =
-      state.frameWidth;
-
-    ctx.shadowColor =
-      "rgba(255,215,80,.8)";
-
-    ctx.shadowBlur = 18;
-
-  }
-
-
-  if (f === "circle") {
-
-    ctx.beginPath();
-
-    ctx.arc(
-      x + w / 2,
-      y + h / 2,
-      Math.min(w,h) / 2,
-      0,
-      Math.PI * 2
-    );
-
-    ctx.stroke();
-
-  } else {
-
-    roundedRect(
-      ctx,
-      x,
-      y,
-      w,
-      h,
-      radius
-    );
-
-    ctx.stroke();
-  }
-
-  ctx.restore();
-}
-
-
-/* =========================================================
-   OVERLAY
-========================================================= */
-
-function drawOverlay(time) {
-
-  if (
-    state.overlayType === "none"
-  ) return;
-
-  let media = null;
-
-  if (state.overlayType === "video")
-    media = overlayVideo;
-
-  if (state.overlayType === "image")
-    media = overlayImage;
-
-  if (state.overlayType === "camera")
-    media = frameCameraVideo;
-
-  if (!media)
-    return;
-
-  const w =
-    canvas.width *
-    state.overlayScale;
-
-  const h =
-    w * 9 / 16;
-
-  const cx =
-    canvas.width *
-    (0.5 + state.frameX);
-
-  const cy =
-    canvas.height *
-    (0.5 + state.frameY);
-
-  const x =
-    cx - w / 2;
-
-  const y =
-    cy - h / 2;
-
-  ctx.save();
-
-  ctx.translate(
-    cx,
-    cy
-  );
-
-  ctx.rotate(
-    state.frameRotation *
-    Math.PI / 180
-  );
-
-  ctx.translate(
-    -cx,
-    -cy
-  );
-
-
-  /* clip shape */
-
-  if (state.frame === "circle") {
-
-    ctx.beginPath();
-
-    ctx.arc(
-      cx,
-      cy,
-      Math.min(w,h) / 2,
-      0,
-      Math.PI * 2
-    );
-
-    ctx.clip();
-
-    drawContain(
-      media,
-      x,
-      y,
-      w,
-      h
-    );
-
-  } else {
-
-    const radius =
-      state.frame === "phone"
-        ? 28
-        : 18;
-
-    roundedRect(
-      ctx,
-      x,
-      y,
-      w,
-      h,
-      radius
-    );
-
-    ctx.clip();
-
-    drawContain(
-      media,
-      x,
-      y,
-      w,
-      h
-    );
-  }
-
-  ctx.restore();
-
-  drawFrameBorder(
-    x,
-    y,
+  drawContain(
+    source,
+    -w/2,
+    -h/2,
     w,
     h
   );
+
+  ctx.restore();
+
+  drawFrameBorder(w,h,state.frame.style);
+
+  ctx.restore();
+
 }
 
 
 /* =========================================================
-   BACKGROUND
-========================================================= */
+   Frame Clip
+   ========================================================= */
 
-function drawBackground() {
+function roundedRectPath(w,h,r){
+
+  const x = -w/2;
+  const y = -h/2;
+
+  ctx.beginPath();
+
+  ctx.roundRect(
+    x,
+    y,
+    w,
+    h,
+    r
+  );
+
+}
+
+
+function clipFrame(w,h,style){
+
+  ctx.beginPath();
+
+  if(style === "circle"){
+
+    ctx.arc(0,0,Math.min(w,h)/2,0,Math.PI*2);
+
+  }else{
+
+    roundedRectPath(
+      w,
+      h,
+      style === "glass" ? 30 : 22
+    );
+
+  }
+
+  ctx.clip();
+
+}
+
+
+/* =========================================================
+   VIP Frame Decorations
+   ========================================================= */
+
+function drawFrameDecoration(w,h,style){
 
   ctx.save();
 
-  ctx.filter =
-    buildFilter();
+  const x = -w/2;
+  const y = -h/2;
 
-  if (state.bgSourceType === "video") {
+  if(style === "gold"){
 
-    drawCover(
-      bgVideo,
-      0,
-      0,
-      canvas.width,
-      canvas.height
+    ctx.shadowBlur = 35;
+    ctx.shadowColor = "#ffd76a";
+
+    const g = ctx.createLinearGradient(
+      x,y,x+w,y+h
     );
 
-  } else if (
-    state.bgSourceType === "camera"
-  ) {
+    g.addColorStop(0,"#fff1a8");
+    g.addColorStop(.25,"#c9962d");
+    g.addColorStop(.5,"#fff0a0");
+    g.addColorStop(.75,"#a96d10");
+    g.addColorStop(1,"#ffe58a");
 
-    drawCover(
-      bgCameraVideo,
-      0,
-      0,
-      canvas.width,
-      canvas.height
+    ctx.fillStyle = g;
+
+    ctx.roundRect(
+      x-18,y-18,
+      w+36,h+36,
+      28
     );
 
-  } else {
+    ctx.fill();
 
-    ctx.fillStyle =
-      "#05070c";
+  }
 
-    ctx.fillRect(
-      0,
-      0,
-      canvas.width,
-      canvas.height
+  else if(style === "blackgold"){
+
+    ctx.shadowBlur = 28;
+    ctx.shadowColor = "#d9a93c";
+
+    ctx.fillStyle = "#090909";
+
+    ctx.roundRect(
+      x-24,y-24,
+      w+48,h+48,
+      28
     );
+
+    ctx.fill();
+
+    ctx.strokeStyle = "#d6a83f";
+    ctx.lineWidth = 10;
+
+    ctx.stroke();
+
+  }
+
+  else if(style === "diamond"){
+
+    ctx.shadowBlur = 30;
+    ctx.shadowColor = "#9eeaff";
+
+    const g = ctx.createLinearGradient(
+      x,y,x+w,y+h
+    );
+
+    g.addColorStop(0,"#ffffff");
+    g.addColorStop(.2,"#9defff");
+    g.addColorStop(.5,"#ffffff");
+    g.addColorStop(.8,"#9ccaff");
+    g.addColorStop(1,"#ffffff");
+
+    ctx.strokeStyle = g;
+    ctx.lineWidth = 18;
+
+    ctx.roundRect(
+      x-9,y-9,
+      w+18,h+18,
+      24
+    );
+
+    ctx.stroke();
+
+    drawDiamondCorners(w,h);
+
+  }
+
+  else if(style === "platinum"){
+
+    ctx.shadowBlur = 20;
+    ctx.shadowColor = "#fff";
+
+    ctx.strokeStyle = "#dce4ed";
+    ctx.lineWidth = 22;
+
+    ctx.roundRect(
+      x-11,y-11,
+      w+22,h+22,
+      22
+    );
+
+    ctx.stroke();
+
+  }
+
+  else if(style === "purple"){
+
+    ctx.shadowBlur = 38;
+    ctx.shadowColor = "#a855f7";
+
+    ctx.strokeStyle = "#b36cff";
+    ctx.lineWidth = 22;
+
+    ctx.roundRect(
+      x-11,y-11,
+      w+22,h+22,
+      28
+    );
+
+    ctx.stroke();
+
+  }
+
+  else if(style === "redgold"){
+
+    ctx.shadowBlur = 32;
+    ctx.shadowColor = "#ff5b39";
+
+    ctx.strokeStyle = "#d6a83f";
+    ctx.lineWidth = 25;
+
+    ctx.roundRect(
+      x-12,y-12,
+      w+24,h+24,
+      25
+    );
+
+    ctx.stroke();
+
+    ctx.strokeStyle = "#9f1717";
+    ctx.lineWidth = 8;
+
+    ctx.roundRect(
+      x-18,y-18,
+      w+36,h+36,
+      31
+    );
+
+    ctx.stroke();
+
+  }
+
+  else if(style === "neon"){
+
+    ctx.shadowBlur = 35;
+    ctx.shadowColor = "#00eaff";
+
+    ctx.strokeStyle = "#00eaff";
+    ctx.lineWidth = 13;
+
+    ctx.roundRect(
+      x-7,y-7,
+      w+14,h+14,
+      25
+    );
+
+    ctx.stroke();
+
+  }
+
+  else if(style === "glass"){
+
+    ctx.shadowBlur = 30;
+    ctx.shadowColor = "#ffffff";
+
+    ctx.fillStyle = "rgba(255,255,255,.12)";
+
+    ctx.roundRect(
+      x-25,y-25,
+      w+50,h+50,
+      32
+    );
+
+    ctx.fill();
+
+    ctx.strokeStyle = "rgba(255,255,255,.7)";
+    ctx.lineWidth = 4;
+
+    ctx.stroke();
+
+  }
+
+  else if(style === "rainbow"){
+
+    const g = ctx.createLinearGradient(
+      x,y,x+w,y+h
+    );
+
+    g.addColorStop(0,"#ff0000");
+    g.addColorStop(.2,"#ffff00");
+    g.addColorStop(.4,"#00ff88");
+    g.addColorStop(.6,"#00ccff");
+    g.addColorStop(.8,"#8c5cff");
+    g.addColorStop(1,"#ff38c8");
+
+    ctx.shadowBlur = 30;
+    ctx.shadowColor = "#fff";
+
+    ctx.strokeStyle = g;
+    ctx.lineWidth = 18;
+
+    ctx.roundRect(
+      x-9,y-9,
+      w+18,h+18,
+      28
+    );
+
+    ctx.stroke();
+
+  }
+
+  else if(style === "crown"){
+
+    ctx.shadowBlur = 30;
+    ctx.shadowColor = "#ffd84a";
+
+    ctx.strokeStyle = "#ffd84a";
+    ctx.lineWidth = 18;
+
+    ctx.roundRect(
+      x-9,y-9,
+      w+18,h+18,
+      25
+    );
+
+    ctx.stroke();
+
+    drawCrown(w,h);
+
   }
 
   ctx.restore();
+
+}
+
+
+function drawFrameBorder(w,h,style){
+
+  ctx.save();
+
+  const x = -w/2;
+  const y = -h/2;
+
+  ctx.shadowBlur = 0;
+
+  if(style === "gold"){
+
+    ctx.strokeStyle = "#fff0a0";
+    ctx.lineWidth = 3;
+
+  }else if(style === "diamond"){
+
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 3;
+
+  }else if(style === "neon"){
+
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 2;
+
+  }else{
+
+    ctx.strokeStyle = "rgba(255,255,255,.55)";
+    ctx.lineWidth = 2;
+
+  }
+
+  ctx.roundRect(
+    x,y,w,h,20
+  );
+
+  ctx.stroke();
+
+  ctx.restore();
+
+}
+
+
+function drawDiamondCorners(w,h){
+
+  const points = [
+    [-w/2-20,-h/2-20],
+    [w/2+20,-h/2-20],
+    [-w/2-20,h/2+20],
+    [w/2+20,h/2+20]
+  ];
+
+  points.forEach(([x,y])=>{
+
+    ctx.save();
+
+    ctx.translate(x,y);
+    ctx.rotate(Math.PI/4);
+
+    ctx.fillStyle = "#ffffff";
+
+    ctx.fillRect(
+      -7,-7,
+      14,14
+    );
+
+    ctx.restore();
+
+  });
+
+}
+
+
+function drawCrown(w,h){
+
+  ctx.save();
+
+  ctx.translate(0,-h/2-35);
+
+  ctx.fillStyle = "#ffd94d";
+  ctx.strokeStyle = "#fff0a0";
+  ctx.lineWidth = 3;
+
+  ctx.beginPath();
+
+  ctx.moveTo(-70,20);
+  ctx.lineTo(-50,-25);
+  ctx.lineTo(-15,5);
+  ctx.lineTo(0,-40);
+  ctx.lineTo(20,5);
+  ctx.lineTo(55,-25);
+  ctx.lineTo(75,20);
+  ctx.closePath();
+
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.restore();
+
 }
 
 
 /* =========================================================
-   MAIN RENDER
-========================================================= */
+   Magic Effects
+   ========================================================= */
 
-function render() {
+function randomParticle(i,time){
 
-  const time =
-    bgVideo.currentTime || 0;
+  const seed =
+    Math.sin(i*123.456)*43758.5453;
+
+  const r =
+    seed-Math.floor(seed);
+
+  const seed2 =
+    Math.sin(i*91.77)*24631.22;
+
+  const r2 =
+    seed2-Math.floor(seed2);
+
+  const speed =
+    state.magic.speed / 100;
+
+  return {
+
+    x:r*canvas.width,
+
+    y:
+      (r2*canvas.height +
+       time*.02*speed*(20+r*80))
+      % canvas.height,
+
+    size:
+      state.magic.size*(.5+r),
+
+    alpha:
+      .25+r*.75,
+
+    phase:r*10
+
+  };
+
+}
+
+
+function drawMagic(time){
+
+  const type = state.magic.type;
+
+  if(type === "none") return;
+
+  const intensity =
+    state.magic.intensity/100;
+
+  ctx.save();
+
+  if(type === "galaxy"){
+
+    drawGalaxy(time,intensity);
+
+  }else if(type === "rainbow"){
+
+    drawRainbowAura(time,intensity);
+
+  }else if(type === "neon"){
+
+    drawNeonAura(time,intensity);
+
+  }else if(type === "fire"){
+
+    drawFire(time,intensity);
+
+  }else if(type === "ice"){
+
+    drawIce(time,intensity);
+
+  }else if(type === "streak"){
+
+    drawLightStreak(time,intensity);
+
+  }else{
+
+    drawParticles(time,intensity,type);
+
+  }
+
+  ctx.restore();
+
+}
+
+
+function drawParticles(time,intensity,type){
+
+  const count =
+    Math.floor(70*intensity)+20;
+
+  for(let i=0;i<count;i++){
+
+    const p =
+      randomParticle(i,time);
+
+    let alpha =
+      p.alpha*intensity;
+
+    if(type === "gold"){
+
+      ctx.fillStyle =
+        `rgba(255,210,70,${alpha})`;
+
+    }else if(type === "diamond"){
+
+      ctx.fillStyle =
+        `rgba(220,250,255,${alpha})`;
+
+    }else{
+
+      ctx.fillStyle =
+        `rgba(255,255,255,${alpha})`;
+
+    }
+
+    ctx.shadowBlur =
+      type === "diamond" ? 14 : 8;
+
+    ctx.shadowColor =
+      ctx.fillStyle;
+
+    ctx.beginPath();
+
+    ctx.arc(
+      p.x,
+      p.y,
+      p.size,
+      0,
+      Math.PI*2
+    );
+
+    ctx.fill();
+
+    if(type === "diamond"){
+
+      ctx.strokeStyle =
+        `rgba(255,255,255,${alpha})`;
+
+      ctx.beginPath();
+
+      ctx.moveTo(p.x-p.size*2,p.y);
+      ctx.lineTo(p.x+p.size*2,p.y);
+
+      ctx.moveTo(p.x,p.y-p.size*2);
+      ctx.lineTo(p.x,p.y+p.size*2);
+
+      ctx.stroke();
+
+    }
+
+  }
+
+}
+
+
+function drawGalaxy(time,intensity){
+
+  const W=canvas.width;
+  const H=canvas.height;
+
+  const g=ctx.createRadialGradient(
+    W*.5,H*.5,30,
+    W*.5,H*.5,W*.7
+  );
+
+  g.addColorStop(
+    0,
+    `rgba(120,60,255,${.12*intensity})`
+  );
+
+  g.addColorStop(
+    .5,
+    `rgba(40,100,255,${.08*intensity})`
+  );
+
+  g.addColorStop(
+    1,
+    "rgba(0,0,0,0)"
+  );
+
+  ctx.fillStyle=g;
+  ctx.fillRect(0,0,W,H);
+
+  drawParticles(
+    time,
+    intensity,
+    "diamond"
+  );
+
+}
+
+
+function drawRainbowAura(time,intensity){
+
+  const W=canvas.width;
+  const H=canvas.height;
+
+  ctx.globalCompositeOperation="screen";
+
+  const g=ctx.createLinearGradient(
+    0,
+    Math.sin(time*.001)*H,
+    W,
+    H
+  );
+
+  g.addColorStop(
+    0,
+    `rgba(255,0,100,${.12*intensity})`
+  );
+
+  g.addColorStop(
+    .33,
+    `rgba(0,255,200,${.10*intensity})`
+  );
+
+  g.addColorStop(
+    .66,
+    `rgba(60,100,255,${.12*intensity})`
+  );
+
+  g.addColorStop(
+    1,
+    `rgba(255,0,220,${.10*intensity})`
+  );
+
+  ctx.fillStyle=g;
+  ctx.fillRect(0,0,W,H);
+
+}
+
+
+function drawNeonAura(time,intensity){
+
+  ctx.globalCompositeOperation="screen";
+
+  for(let i=0;i<5;i++){
+
+    ctx.beginPath();
+
+    const y =
+      canvas.height*(.15+i*.18) +
+      Math.sin(time*.002+i)*30;
+
+    ctx.moveTo(0,y);
+
+    for(let x=0;x<canvas.width;x+=40){
+
+      ctx.lineTo(
+        x,
+        y+
+        Math.sin(x*.008+time*.002+i)*25
+      );
+
+    }
+
+    ctx.strokeStyle =
+      `rgba(${i%2?0:50},${100+i*25},255,${.10*intensity})`;
+
+    ctx.lineWidth=15;
+    ctx.shadowBlur=30;
+
+    ctx.stroke();
+
+  }
+
+}
+
+
+function drawFire(time,intensity){
+
+  ctx.globalCompositeOperation="screen";
+
+  for(let i=0;i<70;i++){
+
+    const x =
+      (i*137)%canvas.width;
+
+    const y =
+      canvas.height-
+      ((time*.05+i*73)%220);
+
+    ctx.fillStyle =
+      `rgba(255,${70+i%80},20,${.08*intensity})`;
+
+    ctx.beginPath();
+
+    ctx.arc(
+      x,
+      y,
+      5+(i%10),
+      0,
+      Math.PI*2
+    );
+
+    ctx.fill();
+
+  }
+
+}
+
+
+function drawIce(time,intensity){
+
+  ctx.globalCompositeOperation="screen";
+
+  for(let i=0;i<35;i++){
+
+    const x=(i*193)%canvas.width;
+
+    const y=
+      (i*97+time*.02)%canvas.height;
+
+    ctx.strokeStyle=
+      `rgba(170,235,255,${.16*intensity})`;
+
+    ctx.lineWidth=2;
+
+    ctx.beginPath();
+
+    ctx.moveTo(x-8,y);
+    ctx.lineTo(x+8,y);
+    ctx.moveTo(x,y-8);
+    ctx.lineTo(x,y+8);
+
+    ctx.stroke();
+
+  }
+
+}
+
+
+function drawLightStreak(time,intensity){
+
+  ctx.globalCompositeOperation="screen";
+
+  for(let i=0;i<10;i++){
+
+    const y =
+      (i*83+time*.05)%canvas.height;
+
+    const x =
+      Math.sin(i+time*.001)*200;
+
+    const g=ctx.createLinearGradient(
+      x,
+      y,
+      x+400,
+      y
+    );
+
+    g.addColorStop(
+      0,
+      "rgba(255,255,255,0)"
+    );
+
+    g.addColorStop(
+      .5,
+      `rgba(255,255,255,${.18*intensity})`
+    );
+
+    g.addColorStop(
+      1,
+      "rgba(255,255,255,0)"
+    );
+
+    ctx.strokeStyle=g;
+    ctx.lineWidth=5;
+
+    ctx.beginPath();
+
+    ctx.moveTo(x,y);
+    ctx.lineTo(x+400,y);
+
+    ctx.stroke();
+
+  }
+
+}
+
+
+/* =========================================================
+   Text
+   ========================================================= */
+
+function drawText(time){
+
+  const text=state.text.value;
+
+  if(!text) return;
+
+  ctx.save();
+
+  let x =
+    canvas.width/2+
+    state.text.x;
+
+  let y =
+    canvas.height/2+
+    state.text.y;
+
+  let scale=1;
+
+  if(state.text.animation==="float"){
+
+    y += Math.sin(time*.003)*15;
+
+  }
+
+  if(state.text.animation==="pulse"){
+
+    scale =
+      1+
+      Math.sin(time*.004)*.08;
+
+  }
+
+  if(state.text.animation==="slide"){
+
+    x +=
+      Math.sin(time*.0015)*120;
+
+  }
+
+  ctx.translate(x,y);
+  ctx.scale(scale,scale);
+
+  ctx.font =
+    `bold ${state.text.size}px Arial`;
+
+  ctx.textAlign="center";
+  ctx.textBaseline="middle";
+
+  ctx.lineWidth=8;
+  ctx.strokeStyle="rgba(0,0,0,.75)";
+
+  ctx.shadowBlur =
+    state.text.animation==="glow" ? 25 : 8;
+
+  ctx.shadowColor=
+    state.text.color;
+
+  ctx.strokeText(text,0,0);
+
+  ctx.fillStyle=state.text.color;
+
+  ctx.fillText(text,0,0);
+
+  ctx.restore();
+
+}
+
+
+/* =========================================================
+   Render Loop
+   ========================================================= */
+
+function render(){
+
+  const now=performance.now();
 
   ctx.clearRect(
     0,
@@ -2108,415 +1605,535 @@ function render() {
 
   drawBackground();
 
-  drawOverlay(time);
+  drawFrame();
 
-  drawText(time);
+  drawMagic(now);
 
-  $("currentTime").textContent =
-    formatTime(time);
+  drawText(now);
 
-  if (
-    bgVideo.duration &&
-    isFinite(bgVideo.duration)
-  ) {
+  requestAnimationFrame(render);
 
-    $("timeline").value =
-      (time / bgVideo.duration) * 100;
-  }
-
-  animationFrame =
-    requestAnimationFrame(render);
 }
 
-
-function startRender() {
-
-  if (!animationFrame)
-    render();
-}
+setCanvasResolution();
+render();
 
 
 /* =========================================================
-   VIDEO EVENTS
-========================================================= */
+   Drag + Touch + Pinch + Rotation
+   ========================================================= */
 
-bgVideo.addEventListener("play", () => {
-  startRender();
+let pointerMode=null;
+
+let startX=0;
+let startY=0;
+
+let originalFrameX=0;
+let originalFrameY=0;
+
+let initialDistance=0;
+let initialScale=0;
+
+let initialAngle=0;
+let initialRotation=0;
+
+
+function pointerPosition(e){
+
+  const rect=canvas.getBoundingClientRect();
+
+  return {
+
+    x:
+      (e.clientX-rect.left)*
+      canvas.width/rect.width,
+
+    y:
+      (e.clientY-rect.top)*
+      canvas.height/rect.height
+
+  };
+
+}
+
+
+function frameHit(x,y){
+
+  const cx=
+    canvas.width/2+
+    state.frame.x;
+
+  const cy=
+    canvas.height/2+
+    state.frame.y;
+
+  const w=
+    canvas.width*.52*
+    state.frame.scale;
+
+  const h=
+    w*.56;
+
+  return (
+    Math.abs(x-cx)<w/2 &&
+    Math.abs(y-cy)<h/2
+  );
+
+}
+
+
+canvas.addEventListener("pointerdown",e=>{
+
+  if(!state.frame.visible) return;
+
+  const p=pointerPosition(e);
+
+  if(!frameHit(p.x,p.y)) return;
+
+  canvas.setPointerCapture(e.pointerId);
+
+  pointerMode="drag";
+
+  startX=p.x;
+  startY=p.y;
+
+  originalFrameX=state.frame.x;
+  originalFrameY=state.frame.y;
+
 });
 
-bgVideo.addEventListener("pause", () => {
-  startRender();
+
+canvas.addEventListener("pointermove",e=>{
+
+  if(pointerMode!=="drag") return;
+
+  const p=pointerPosition(e);
+
+  state.frame.x =
+    originalFrameX+
+    (p.x-startX);
+
+  state.frame.y =
+    originalFrameY+
+    (p.y-startY);
+
+  document.getElementById("frameX").value =
+    clamp(state.frame.x,-640,640);
+
+  document.getElementById("frameY").value =
+    clamp(state.frame.y,-360,360);
+
 });
 
-bgVideo.addEventListener("ended", () => {
 
-  $("playBtn").textContent = "▶";
+canvas.addEventListener("pointerup",()=>{
+  pointerMode=null;
+});
+
+
+/* Touch gesture */
+
+canvas.addEventListener(
+  "touchstart",
+  e=>{
+
+    if(e.touches.length!==2) return;
+
+    const a=e.touches[0];
+    const b=e.touches[1];
+
+    initialDistance=
+      Math.hypot(
+        a.clientX-b.clientX,
+        a.clientY-b.clientY
+      );
+
+    initialScale=state.frame.scale;
+
+    initialAngle=
+      Math.atan2(
+        b.clientY-a.clientY,
+        b.clientX-a.clientX
+      );
+
+    initialRotation=
+      state.frame.rotation;
+
+  },
+  {passive:true}
+);
+
+
+canvas.addEventListener(
+  "touchmove",
+  e=>{
+
+    if(e.touches.length!==2) return;
+
+    e.preventDefault();
+
+    const a=e.touches[0];
+    const b=e.touches[1];
+
+    const distance=
+      Math.hypot(
+        a.clientX-b.clientX,
+        a.clientY-b.clientY
+      );
+
+    const scaleChange=
+      distance/initialDistance;
+
+    state.frame.scale=
+      clamp(
+        initialScale*scaleChange,
+        .15,
+        2.5
+      );
+
+    const angle=
+      Math.atan2(
+        b.clientY-a.clientY,
+        b.clientX-a.clientX
+      );
+
+    const delta=
+      (angle-initialAngle)*
+      180/Math.PI;
+
+    state.frame.rotation=
+      initialRotation+delta;
+
+    document.getElementById("frameScale").value =
+      state.frame.scale;
+
+    document.getElementById("frameRotation").value =
+      state.frame.rotation;
+
+  },
+  {passive:false}
+);
+
+
+/* =========================================================
+   Tabs
+   ========================================================= */
+
+document.querySelectorAll(".tab").forEach(tab=>{
+
+  tab.onclick=()=>{
+
+    document
+      .querySelectorAll(".tab")
+      .forEach(x=>x.classList.remove("active"));
+
+    document
+      .querySelectorAll(".tab-content")
+      .forEach(x=>x.classList.remove("active"));
+
+    tab.classList.add("active");
+
+    document
+      .getElementById(tab.dataset.tab)
+      .classList.add("active");
+
+  };
+
 });
 
 
 /* =========================================================
-   EXPORT
-========================================================= */
+   Audio Preview
+   ========================================================= */
 
-$("exportBtn").addEventListener(
-  "click",
-  exportVideo
-);
+function updateAudioPreview(){
 
-$("exportBtn2").addEventListener(
-  "click",
-  exportVideo
-);
+  bgVideo.muted =
+    !state.audio.bg;
 
+  bgVideo.volume =
+    state.audio.bgVolume;
 
-async function exportVideo() {
+  frameVideo.muted =
+    !state.audio.frame;
 
-  if (exporting)
-    return;
+  frameVideo.volume =
+    state.audio.frameVolume;
 
-  exporting = true;
+  document.getElementById("musicAudio").volume =
+    state.audio.musicVolume;
 
-  setProgress(0);
+}
 
-  $("exportMessage").textContent =
-    "Preparing premium export...";
+setInterval(updateAudioPreview,300);
 
-  try {
 
-    if (
-      state.bgSourceType === "none" &&
-      !bgCameraStream
-    ) {
+/* =========================================================
+   Recording
+   ========================================================= */
 
-      throw new Error(
-        "पहले Background Video या Background Camera शुरू करें।"
-      );
-    }
+function getRecordingMime(){
 
+  const types=[
+    "video/webm;codecs=vp9,opus",
+    "video/webm;codecs=vp8,opus",
+    "video/webm"
+  ];
 
-    const quality =
-      Number(
-        $("exportQuality").value
-      );
+  return types.find(
+    t=>MediaRecorder.isTypeSupported(t)
+  ) || "";
 
-    const fps =
-      Number(
-        $("exportFps").value
-      );
+}
 
-    const bitrate =
-      Number(
-        $("exportBitrate").value
-      );
 
+async function startRecording(){
 
-    const originalWidth =
-      canvas.width;
+  if(recording) return;
 
-    const originalHeight =
-      canvas.height;
+  setCanvasResolution();
 
+  const fps=
+    Number(document.getElementById("fps").value);
 
-    if (quality === 720) {
+  const videoStream =
+    canvas.captureStream(fps);
 
-      canvas.width = 1280;
-      canvas.height = 720;
+  let finalStream =
+    new MediaStream();
 
-    } else if (quality === 1080) {
-
-      canvas.width = 1920;
-      canvas.height = 1080;
-
-    } else {
-
-      canvas.width = 2560;
-      canvas.height = 1440;
-    }
-
-
-    await setupAudio();
-
-    rebuildCameraAudio();
-
-    updateAudio();
-
-
-    const stream =
-      canvas.captureStream(fps);
-
-
-    if (
-      audioDestination &&
-      audioDestination.stream
-        .getAudioTracks()
-        .length
-    ) {
-
-      audioDestination.stream
-        .getAudioTracks()
-        .forEach(track => {
-          stream.addTrack(track);
-        });
-    }
-
-
-    let mime =
-      "video/webm;codecs=vp9,opus";
-
-    if (
-      !MediaRecorder.isTypeSupported(mime)
-    ) {
-
-      mime =
-        "video/webm;codecs=vp8,opus";
-    }
-
-    if (
-      !MediaRecorder.isTypeSupported(mime)
-    ) {
-
-      mime =
-        "video/webm";
-    }
-
-
-    const recorder =
-      new MediaRecorder(
-        stream,
-        {
-          mimeType: mime,
-          videoBitsPerSecond: bitrate,
-          audioBitsPerSecond: 192000
-        }
-      );
-
-
-    const chunks = [];
-
-    recorder.ondataavailable =
-      e => {
-
-        if (e.data.size)
-          chunks.push(e.data);
-      };
-
-
-    const done =
-      new Promise(resolve => {
-
-        recorder.onstop = resolve;
-      });
-
-
-    const wasPlaying =
-      !bgVideo.paused;
-
-    const startTime =
-      bgVideo.currentTime || 0;
-
-
-    if (
-      state.overlayType === "video"
-    ) {
-
-      try {
-        overlayVideo.currentTime =
-          startTime;
-      } catch (_) {}
-
-      overlayVideo.play().catch(() => {});
-    }
-
-
-    if (
-      state.bgSourceType === "video"
-    ) {
-
-      bgVideo.currentTime =
-        startTime;
-
-      await bgVideo.play().catch(() => {});
-    }
-
-
-    if (
-      state.musicEnabled &&
-      musicAudio.src
-    ) {
-
-      musicAudio.currentTime =
-        0;
-
-      musicAudio.play().catch(() => {});
-    }
-
-
-    recorder.start(200);
-
-    $("exportMessage").textContent =
-      "Recording premium video...";
-
-
-    const total =
-      state.bgSourceType === "video"
-        ? bgVideo.duration
-        : 30;
-
-    const start =
-      performance.now();
-
-
-    await new Promise(resolve => {
-
-      function check() {
-
-        const elapsed =
-          (performance.now() - start) / 1000;
-
-        let progress =
-          total
-            ? elapsed / total
-            : 0;
-
-        setProgress(
-          Math.min(95, progress * 95)
-        );
-
-        if (
-          state.bgSourceType === "video" &&
-          bgVideo.ended
-        ) {
-
-          resolve();
-          return;
-        }
-
-        if (
-          state.bgSourceType === "camera" &&
-          elapsed >= total
-        ) {
-
-          resolve();
-          return;
-        }
-
-        requestAnimationFrame(check);
-      }
-
-      check();
+  videoStream
+    .getVideoTracks()
+    .forEach(track=>{
+      finalStream.addTrack(track);
     });
 
 
-    recorder.stop();
+  /*
+    Camera audio and media audio are intentionally
+    kept simple here.
 
-    await done;
+    The canvas contains the complete visual composition,
+    including background camera and frame camera.
+  */
+
+  const audioTracks=[];
+
+  if(
+    bgCameraStream &&
+    state.audio.bg
+  ){
+
+    bgCameraStream
+      .getAudioTracks()
+      .forEach(t=>audioTracks.push(t));
+
+  }
+
+  if(
+    frameCameraStream &&
+    state.audio.frame
+  ){
+
+    frameCameraStream
+      .getAudioTracks()
+      .forEach(t=>audioTracks.push(t));
+
+  }
+
+  /*
+    If camera audio exists, attach it.
+    Browser MediaRecorder can record multiple audio
+    tracks on some browsers, but support varies.
+  */
+
+  if(audioTracks.length){
+
+    audioTracks.forEach(track=>{
+      finalStream.addTrack(track);
+    });
+
+  }
 
 
-    bgVideo.pause();
+  const mime=getRecordingMime();
 
-    if (
-      state.overlayType === "video"
-    )
-      overlayVideo.pause();
+  if(!mime){
 
-    if (
-      state.musicEnabled
-    )
-      musicAudio.pause();
+    alert(
+      "इस browser में WebM recording supported नहीं है। Chrome/Edge का नया version इस्तेमाल करें।"
+    );
 
+    return;
 
-    setProgress(100);
+  }
 
-    const blob =
-      new Blob(
-        chunks,
+  recordedChunks=[];
+
+  try{
+
+    mediaRecorder=
+      new MediaRecorder(
+        finalStream,
         {
-          type: mime
+          mimeType:mime,
+          videoBitsPerSecond:12000000
         }
       );
 
+  }catch(error){
 
-    const url =
+    console.error(error);
+
+    alert("Recording शुरू नहीं हो सकी।");
+
+    return;
+
+  }
+
+
+  mediaRecorder.ondataavailable=e=>{
+
+    if(e.data && e.data.size>0){
+      recordedChunks.push(e.data);
+    }
+
+  };
+
+
+  mediaRecorder.onstop=()=>{
+
+    const blob=
+      new Blob(
+        recordedChunks,
+        {type:mime}
+      );
+
+    const url=
       URL.createObjectURL(blob);
 
-    const a =
-      document.createElement("a");
+    downloadBtn.href=url;
+    downloadBtn.download=
+      "ai-video-editor-pro.webm";
 
-    a.href = url;
+    downloadBtn.classList.remove("hidden");
 
-    a.download =
-      "ai-video-editor-premium.webm";
+    status("Recording Ready");
 
-    document.body.appendChild(a);
-
-    a.click();
-
-    a.remove();
+  };
 
 
-    $("exportMessage").textContent =
-      "✅ Export complete — WebM video तैयार है।";
+  mediaRecorder.start(500);
+
+  recording=true;
+
+  recordStart=Date.now();
+
+  recordBtn.disabled=true;
+  stopRecordBtn.disabled=false;
+
+  downloadBtn.classList.add("hidden");
+
+  timerInterval=
+    setInterval(()=>{
+
+      recordTimer.textContent=
+        formatTime(
+          (Date.now()-recordStart)/1000
+        );
+
+    },500);
+
+  status("🔴 Recording...");
+
+}
 
 
-    canvas.width =
-      originalWidth;
+function stopRecording(){
 
-    canvas.height =
-      originalHeight;
+  if(!recording) return;
 
-    startRender();
+  recording=false;
 
+  clearInterval(timerInterval);
 
-  } catch (err) {
-
-    console.error(err);
-
-    $("exportMessage").textContent =
-      "❌ Export error: " +
-      err.message;
-
-    alert(
-      "Export में समस्या हुई:\n\n" +
-      err.message
+  recordTimer.textContent=
+    formatTime(
+      (Date.now()-recordStart)/1000
     );
 
-  } finally {
+  if(
+    mediaRecorder &&
+    mediaRecorder.state!=="inactive"
+  ){
 
-    exporting = false;
+    mediaRecorder.stop();
+
   }
+
+  recordBtn.disabled=false;
+  stopRecordBtn.disabled=true;
+
+  status("Processing Recording...");
+
 }
 
 
-/* =========================================================
-   INITIALIZE
-========================================================= */
-
-async function initialize() {
-
-  try {
-
-    await loadDevices();
-
-  } catch (_) {}
-
-  applyLookDefaults("normal");
-
-  startRender();
-
-  /*
-    Mobile browsers में camera/audio permission तभी
-    मांगी जाती है जब user button दबाता है।
-  */
-}
-
-initialize();
+recordBtn.onclick=startRecording;
+stopRecordBtn.onclick=stopRecording;
 
 
 /* =========================================================
-   CAMERA DEVICE REFRESH
-========================================================= */
+   Auto stop background video
+   ========================================================= */
 
-navigator.mediaDevices?.addEventListener?.(
-  "devicechange",
-  loadDevices
+bgVideo.addEventListener("ended",()=>{
+
+  if(recording){
+
+    stopRecording();
+
+  }
+
+});
+
+
+/* =========================================================
+   Resolution
+   ========================================================= */
+
+document
+  .getElementById("resolution")
+  .addEventListener(
+    "change",
+    setCanvasResolution
+  );
+
+
+/* =========================================================
+   Visibility
+   ========================================================= */
+
+document.addEventListener(
+  "visibilitychange",
+  ()=>{
+
+    if(document.hidden){
+
+      /*
+        Do not stop rendering/camera automatically.
+        Mobile browsers may pause background tabs,
+        which is a browser restriction.
+      */
+
+    }
+
+  }
 );
+
+
+/* =========================================================
+   Initial status
+   ========================================================= */
+
+status("Ready — Premium Editor");
