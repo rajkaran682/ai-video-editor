@@ -2,787 +2,642 @@
 <html lang="hi">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-  <title>AI Video Editor</title>
-
-  <link rel="stylesheet" href="style.css">
-
-  <!-- FFmpeg -->
-  <script
-    src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js"
-    crossorigin="anonymous">
-  </script>
-
-  <script
-    src="https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.1/dist/umd/index.js"
-    crossorigin="anonymous">
-  </script>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
+  <meta name="theme-color" content="#090b12">
+  <title>AI Video Editor Pro</title>
+  <link rel="stylesheet" href="/style.css">
 </head>
 
 <body>
 
 <header class="topbar">
   <div>
-    <h1>🎬 AI Video Editor</h1>
-    <p>Professional online video editing studio</p>
+    <div class="brand">🎬 AI Video Editor <span>PRO</span></div>
+    <div class="sub">Premium Video • Camera • Frames • Voice Studio</div>
   </div>
 
-  <button id="exportBtn" class="export-btn">
-    ⬇️ Export Video
-  </button>
+  <button id="exportBtn" class="export-btn">⬇ Export Video</button>
 </header>
 
+<main class="app">
 
-<main class="editor">
+  <!-- PREVIEW -->
+  <section class="preview-panel">
+    <div class="preview-head">
+      <div>
+        <strong>Live Preview</strong>
+        <small id="previewStatus">No media loaded</small>
+      </div>
 
-  <!-- LEFT PANEL -->
-  <aside class="sidebar">
-
-    <div class="upload-box" id="dropZone">
-      <div class="upload-icon">🎥</div>
-
-      <h3>Video Upload करें</h3>
-
-      <p>
-        Video को यहाँ drag & drop करें
-        या नीचे से चुनें
-      </p>
-
-      <input
-        type="file"
-        id="videoInput"
-        accept="video/*">
-
-      <label for="videoInput" class="choose-btn">
-        📁 Video चुनें
-      </label>
+      <div class="preview-actions">
+        <button id="playBtn">▶</button>
+        <button id="mutePreviewBtn">🔊</button>
+        <button id="fullscreenBtn">⛶</button>
+      </div>
     </div>
 
+    <div id="stageWrap" class="stage-wrap">
+      <canvas id="canvas" width="1280" height="720"></canvas>
 
-    <div class="tool-tabs">
-
-      <button class="tab active" data-tab="basic">
-        ⚙️ Basic
-      </button>
-
-      <button class="tab" data-tab="look">
-        🎨 Look
-      </button>
-
-      <button class="tab" data-tab="audio">
-        🔊 Audio
-      </button>
-
-      <button class="tab" data-tab="text">
-        ✍️ Text
-      </button>
-
-      <button class="tab" data-tab="frames">
-        🖼️ Frames
-      </button>
-
-      <button class="tab" data-tab="templates">
-        ✨ Templates
-      </button>
-
+      <div id="emptyPreview" class="empty-preview">
+        <div>🎥</div>
+        <b>अपना वीडियो या कैमरा शुरू करें</b>
+        <span>Background Video / Camera से शुरुआत करें</span>
+      </div>
     </div>
 
+    <div class="timeline-bar">
+      <span id="currentTime">00:00</span>
+      <input id="timeline" type="range" min="0" max="100" value="0">
+      <span id="duration">00:00</span>
+    </div>
+  </section>
 
-    <!-- BASIC -->
-    <section class="panel active" id="basic">
+  <!-- TOOLBOX -->
+  <section class="editor">
 
-      <h2>Basic Editing</h2>
+    <div class="tabs">
+      <button class="tab active" data-tab="media">🎥 Media</button>
+      <button class="tab" data-tab="camera">📷 Camera</button>
+      <button class="tab" data-tab="text">🔤 Text</button>
+      <button class="tab" data-tab="frames">🖼 Frames</button>
+      <button class="tab" data-tab="color">🎨 Premium Color</button>
+      <button class="tab" data-tab="audio">🎙 Audio</button>
+      <button class="tab" data-tab="export">⚙ Export</button>
+    </div>
 
-      <label>
-        Start Time
-        <input
-          type="number"
-          id="startTime"
-          min="0"
-          step="0.1"
-          value="0">
-      </label>
+    <!-- MEDIA -->
+    <div class="tab-content active" id="tab-media">
 
-      <label>
-        End Time
-        <input
-          type="number"
-          id="endTime"
-          min="0"
-          step="0.1"
-          value="0">
-      </label>
+      <div class="card">
+        <h3>🎥 Background Video</h3>
 
-      <label>
-        Rotate
-        <select id="rotate">
-          <option value="0">0°</option>
-          <option value="90">90°</option>
-          <option value="180">180°</option>
-          <option value="270">270°</option>
-        </select>
-      </label>
-
-      <label>
-        Flip
-        <select id="flip">
-          <option value="none">None</option>
-          <option value="horizontal">Horizontal</option>
-          <option value="vertical">Vertical</option>
-        </select>
-      </label>
-
-      <label>
-        Resolution
-        <select id="resolution">
-          <option value="original">Original</option>
-          <option value="1080">1080p</option>
-          <option value="720">720p</option>
-          <option value="480">480p</option>
-        </select>
-      </label>
-
-    </section>
-
-
-    <!-- LOOK -->
-    <section class="panel" id="look">
-
-      <h2>🎨 Color & Filters</h2>
-
-      <label>
-        Brightness
-        <input
-          type="range"
-          id="brightness"
-          min="50"
-          max="150"
-          value="100">
-      </label>
-
-      <label>
-        Contrast
-        <input
-          type="range"
-          id="contrast"
-          min="50"
-          max="150"
-          value="100">
-      </label>
-
-      <label>
-        Saturation
-        <input
-          type="range"
-          id="saturation"
-          min="0"
-          max="200"
-          value="100">
-      </label>
-
-      <label>
-        Filter
-
-        <select id="filter">
-          <option value="none">Original</option>
-          <option value="grayscale">Black & White</option>
-          <option value="sepia">Sepia</option>
-          <option value="vintage">Vintage</option>
-          <option value="cinematic">Cinematic</option>
-          <option value="warm">Warm</option>
-          <option value="cool">Cool</option>
-        </select>
-
-      </label>
-
-    </section>
-
-
-    <!-- AUDIO -->
-    <section class="panel" id="audio">
-
-      <h2>🔊 Audio</h2>
-
-      <label>
-        Volume
-        <input
-          type="range"
-          id="volume"
-          min="0"
-          max="200"
-          value="100">
-      </label>
-
-      <label class="checkbox-row">
-        <input
-          type="checkbox"
-          id="mute">
-
-        Mute Original Audio
-      </label>
-
-
-      <label>
-        Playback Speed
-
-        <select id="speed">
-          <option value="0.5">0.5×</option>
-          <option value="0.75">0.75×</option>
-          <option value="1" selected>1×</option>
-          <option value="1.25">1.25×</option>
-          <option value="1.5">1.5×</option>
-          <option value="2">2×</option>
-        </select>
-      </label>
-
-
-      <div class="music-upload">
-
-        <h3>🎵 Background Music</h3>
-
-        <input
-          type="file"
-          id="musicInput"
-          accept="audio/*">
-
-        <label for="musicInput" class="choose-btn">
-          🎵 Music चुनें
+        <label class="upload">
+          <input id="bgVideoInput" type="file" accept="video/*">
+          <span>📁 Background Video चुनें</span>
         </label>
 
-        <button
-          id="removeMusic"
-          class="small-btn">
-          Remove Music
-        </button>
-
-        <p id="musicName">
-          कोई music नहीं चुना गया
-        </p>
-
+        <div class="control-grid">
+          <button id="removeBgBtn" class="danger">🗑 Remove Video</button>
+          <button id="replaceBgBtn">🔄 Replace</button>
+        </div>
       </div>
 
-    </section>
-
-
-    <!-- TEXT -->
-    <section class="panel" id="text">
-
-      <h2>✍️ Professional Text</h2>
-
-      <label>
-        Text
-
-        <textarea
-          id="textInput"
-          placeholder="अपना text लिखें..."></textarea>
-      </label>
-
-
-      <label>
-        Text Color
-
-        <input
-          type="color"
-          id="textColor"
-          value="#ffffff">
-      </label>
-
-
-      <label>
-        Background
-
-        <input
-          type="color"
-          id="textBg"
-          value="#000000">
-      </label>
-
-
-      <label class="checkbox-row">
-        <input
-          type="checkbox"
-          id="transparentBg">
-
-        Transparent Background
-      </label>
-
-
-      <label>
-        Font Size
-
-        <input
-          type="range"
-          id="fontSize"
-          min="18"
-          max="180"
-          value="64">
-      </label>
-
-
-      <label>
-        Font Family
-
-        <select id="fontFamily">
-
-          <option value="Arial">
-            Arial
-          </option>
-
-          <option value="Georgia">
-            Georgia
-          </option>
-
-          <option value="Verdana">
-            Verdana
-          </option>
-
-          <option value="Trebuchet MS">
-            Trebuchet MS
-          </option>
-
-          <option value="Courier New">
-            Courier New
-          </option>
-
-          <option value="Impact">
-            Impact
-          </option>
-
-          <option value="Times New Roman">
-            Times New Roman
-          </option>
-
-        </select>
-      </label>
-
-
-      <label>
-        Font Style
-
-        <select id="fontStyle">
-
-          <option value="normal">
-            Normal
-          </option>
-
-          <option value="bold">
-            Bold
-          </option>
-
-          <option value="italic">
-            Italic
-          </option>
-
-          <option value="bold italic">
-            Bold Italic
-          </option>
-
-        </select>
-      </label>
-
-
-      <label>
-        Alignment
-
-        <select id="textAlign">
-
-          <option value="left">
-            Left
-          </option>
-
-          <option value="center">
-            Center
-          </option>
-
-          <option value="right">
-            Right
-          </option>
-
-        </select>
-
-      </label>
-
-
-      <label>
-        Position
-
-        <select id="textPosition">
-
-          <option value="top">
-            Top
-          </option>
-
-          <option value="middle">
-            Middle
-          </option>
-
-          <option value="bottom">
-            Bottom
-          </option>
-
-        </select>
-
-      </label>
-
-
-      <label class="checkbox-row">
-
-        <input
-          type="checkbox"
-          id="textShadow"
-          checked>
-
-        Text Shadow
-
-      </label>
-
-
-      <hr>
-
-
-      <h3>🎞️ Text Animation</h3>
-
-
-      <label>
-        Animation
-
-        <select id="textAnimation">
-
-          <option value="none">
-            None
-          </option>
-
-          <option value="left">
-            Left → Right
-          </option>
-
-          <option value="right">
-            Right → Left
-          </option>
-
-          <option value="up">
-            Bottom → Top
-          </option>
-
-          <option value="down">
-            Top → Bottom
-          </option>
-
-          <option value="float">
-            🌊 Floating / Water
-          </option>
-
-          <option value="fade">
-            Fade In
-          </option>
-
-          <option value="zoom">
-            Zoom
-          </option>
-
-          <option value="rotate">
-            Rotate
-          </option>
-
-          <option value="typewriter">
-            Typewriter
-          </option>
-
-          <option value="bounce">
-            Bounce
-          </option>
-
-        </select>
-      </label>
-
-
-      <label>
-        Animation Speed
-
-        <input
-          type="range"
-          id="animationSpeed"
-          min="0.2"
-          max="5"
-          step="0.1"
-          value="1">
-      </label>
-
-    </section>
-
-
-    <!-- FRAMES -->
-    <section class="panel" id="frames">
-
-      <h2>🖼️ Photo / Video Frame</h2>
-
-
-      <label>
-        Photo / Video Overlay
-
-        <input
-          type="file"
-          id="overlayInput"
-          accept="image/*,video/*">
-
-      </label>
-
-
-      <div class="frame-grid">
-
-        <button class="frame-btn active" data-frame="none">
-          None
-        </button>
-
-        <button class="frame-btn" data-frame="mobile">
-          📱 Mobile
-        </button>
-
-        <button class="frame-btn" data-frame="polaroid">
-          📸 Polaroid
-        </button>
-
-        <button class="frame-btn" data-frame="circle">
-          ⚪ Circle
-        </button>
-
-        <button class="frame-btn" data-frame="rounded">
-          ▢ Rounded
-        </button>
-
-        <button class="frame-btn" data-frame="film">
-          🎞️ Film
-        </button>
-
-        <button class="frame-btn" data-frame="premium">
-          ✨ Premium
-        </button>
-
-        <button class="frame-btn" data-frame="heart">
-          ❤️ Heart
-        </button>
-
-        <button class="frame-btn" data-frame="tv">
-          📺 TV
-        </button>
-
-      </div>
-
-
-      <label>
-        Overlay Size
-
-        <input
-          type="range"
-          id="overlayScale"
-          min="0.2"
-          max="1"
-          step="0.01"
-          value="0.5">
-      </label>
-
-
-      <label>
-        Overlay X
-
-        <input
-          type="range"
-          id="overlayX"
-          min="0"
-          max="100"
-          value="50">
-      </label>
-
-
-      <label>
-        Overlay Y
-
-        <input
-          type="range"
-          id="overlayY"
-          min="0"
-          max="100"
-          value="50">
-      </label>
-
-
-      <button
-        id="removeOverlay"
-        class="small-btn">
-        Remove Overlay
-      </button>
-
-    </section>
-
-
-    <!-- TEMPLATES -->
-    <section class="panel" id="templates">
-
-      <h2>✨ Professional Templates</h2>
-
-      <div class="template-grid">
-
-        <button
-          class="template-btn"
-          data-template="none">
-          Original
-        </button>
-
-        <button
-          class="template-btn"
-          data-template="cinema">
-          🎬 Cinema
-        </button>
-
-        <button
-          class="template-btn"
-          data-template="social">
-          📱 Social
-        </button>
-
-        <button
-          class="template-btn"
-          data-template="story">
-          📖 Story
-        </button>
-
-        <button
-          class="template-btn"
-          data-template="vintage">
-          📼 Vintage
-        </button>
-
-        <button
-          class="template-btn"
-          data-template="minimal">
-          ◻️ Minimal
-        </button>
-
-      </div>
-
-    </section>
-
-  </aside>
-
-
-  <!-- CENTER PREVIEW -->
-
-  <section class="workspace">
-
-    <div class="preview-area" id="previewArea">
-
-      <video
-        id="video"
-        controls
-        playsinline>
-      </video>
-
-      <canvas id="previewCanvas"></canvas>
-
-      <div
-        id="textPreview"
-        class="text-preview">
+      <div class="card">
+        <h3>🖼 Frame में Photo / Video</h3>
+
+        <label class="upload">
+          <input id="overlayInput" type="file" accept="video/*,image/*">
+          <span>📁 Photo / Video Frame में डालें</span>
+        </label>
+
+        <div class="control-grid">
+          <label>
+            Scale
+            <input id="overlayScale" type="range" min="0.15" max="1.5" step="0.01" value="0.45">
+          </label>
+
+          <label>
+            Rotation
+            <input id="overlayRotation" type="range" min="-180" max="180" value="0">
+          </label>
+        </div>
       </div>
 
     </div>
 
+    <!-- CAMERA -->
+    <div class="tab-content" id="tab-camera">
 
-    <div class="timeline">
+      <div class="card">
+        <h3>📷 Background Live Camera</h3>
+        <p class="hint">Live camera पूरे background में दिखाई देगा।</p>
 
-      <div class="timeline-controls">
+        <div class="control-grid">
+          <button id="startBgCamera" class="primary">▶ Start Background Camera</button>
+          <button id="stopBgCamera">⏹ Stop</button>
+        </div>
 
-        <button id="playBtn">
-          ▶️ Play
-        </button>
+        <div class="camera-row">
+          <label>Camera</label>
+          <select id="bgCameraSelect"></select>
+        </div>
 
-        <button id="pauseBtn">
-          ⏸️ Pause
-        </button>
+        <div class="camera-row">
+          <label>Mic</label>
+          <select id="bgMicSelect"></select>
+        </div>
 
-        <button id="resetBtn">
-          🔄 Reset
-        </button>
+        <label class="switch-row">
+          <input id="bgCameraAudio" type="checkbox" checked>
+          <span>Background Camera Audio</span>
+        </label>
 
+        <label>
+          Camera Volume
+          <input id="bgCameraVolume" type="range" min="0" max="1" step="0.01" value="1">
+        </label>
       </div>
 
-      <input
-        type="range"
-        id="timelineRange"
-        min="0"
-        max="100"
-        value="0">
+      <div class="card">
+        <h3>📱 Frame Live Camera</h3>
+        <p class="hint">Background के ऊपर अलग camera feed frame में चलेगा।</p>
 
-      <div class="time-info">
+        <div class="control-grid">
+          <button id="startFrameCamera" class="primary">▶ Start Frame Camera</button>
+          <button id="stopFrameCamera">⏹ Stop</button>
+        </div>
 
-        <span id="currentTime">
-          00:00
-        </span>
+        <div class="camera-row">
+          <label>Camera</label>
+          <select id="frameCameraSelect"></select>
+        </div>
 
-        <span id="duration">
-          00:00
-        </span>
+        <div class="camera-row">
+          <label>Mic</label>
+          <select id="frameMicSelect"></select>
+        </div>
 
+        <label class="switch-row">
+          <input id="frameCameraAudio" type="checkbox">
+          <span>Frame Camera Audio</span>
+        </label>
+
+        <label>
+          Frame Camera Volume
+          <input id="frameCameraVolume" type="range" min="0" max="1" step="0.01" value="1">
+        </label>
+      </div>
+
+      <div class="card">
+        <h3>📐 Camera Position</h3>
+
+        <div class="control-grid">
+          <label>
+            X
+            <input id="cameraX" type="range" min="-0.45" max="0.45" step="0.01" value="0">
+          </label>
+
+          <label>
+            Y
+            <input id="cameraY" type="range" min="-0.45" max="0.45" step="0.01" value="0">
+          </label>
+
+          <label>
+            Scale
+            <input id="cameraScale" type="range" min="0.15" max="1.4" step="0.01" value="0.45">
+          </label>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- TEXT -->
+    <div class="tab-content" id="tab-text">
+
+      <div class="card">
+        <h3>🔤 Professional Text Studio</h3>
+
+        <textarea id="textInput" rows="3" placeholder="यहाँ अपना टेक्स्ट लिखें...">Premium Text</textarea>
+
+        <div class="control-grid">
+          <label>
+            Font
+            <select id="textFont">
+              <option value="Arial">Arial</option>
+              <option value="Verdana">Verdana</option>
+              <option value="Georgia">Georgia</option>
+              <option value="Impact">Impact</option>
+              <option value="Trebuchet MS">Trebuchet</option>
+              <option value="Courier New">Courier</option>
+            </select>
+          </label>
+
+          <label>
+            Size
+            <input id="textSize" type="range" min="20" max="180" value="70">
+          </label>
+
+          <label>
+            Weight
+            <select id="textWeight">
+              <option value="400">Normal</option>
+              <option value="600">Semi Bold</option>
+              <option value="700" selected>Bold</option>
+              <option value="900">Black</option>
+            </select>
+          </label>
+
+          <label>
+            Style
+            <select id="textStyle">
+              <option value="normal">Normal</option>
+              <option value="italic">Italic</option>
+            </select>
+          </label>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>✨ Text Effects</h3>
+
+        <div class="chips">
+          <button class="effect-chip active" data-effect="normal">Normal</button>
+          <button class="effect-chip" data-effect="outline">Outline</button>
+          <button class="effect-chip" data-effect="neon">Neon</button>
+          <button class="effect-chip" data-effect="glow">Glow</button>
+          <button class="effect-chip" data-effect="shadow">Shadow</button>
+          <button class="effect-chip" data-effect="gradient">Gradient</button>
+          <button class="effect-chip" data-effect="gold">Gold</button>
+          <button class="effect-chip" data-effect="rainbow">Rainbow</button>
+        </div>
+
+        <div class="control-grid">
+          <label>
+            Text Color
+            <input id="textColor" type="color" value="#ffffff">
+          </label>
+
+          <label>
+            Outline
+            <input id="textOutlineColor" type="color" value="#000000">
+          </label>
+
+          <label>
+            Outline Width
+            <input id="textOutlineWidth" type="range" min="0" max="20" value="3">
+          </label>
+
+          <label>
+            Opacity
+            <input id="textOpacity" type="range" min="0" max="1" step="0.01" value="1">
+          </label>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>🌊 Text Animation</h3>
+
+        <select id="textAnimation">
+          <option value="none">None</option>
+          <option value="left">Left → Right</option>
+          <option value="right">Right → Left</option>
+          <option value="up">Bottom → Top</option>
+          <option value="down">Top → Bottom</option>
+          <option value="float">Floating / Water</option>
+          <option value="wave">Wave Letters</option>
+          <option value="fade">Fade In/Out</option>
+          <option value="zoom">Zoom</option>
+          <option value="bounce">Bounce</option>
+          <option value="typewriter">Typewriter</option>
+          <option value="ticker">News Ticker</option>
+        </select>
+
+        <div class="control-grid">
+          <label>
+            X Position
+            <input id="textX" type="range" min="0" max="1" step="0.01" value="0.5">
+          </label>
+
+          <label>
+            Y Position
+            <input id="textY" type="range" min="0" max="1" step="0.01" value="0.82">
+          </label>
+
+          <label>
+            Rotation
+            <input id="textRotation" type="range" min="-180" max="180" value="0">
+          </label>
+
+          <label>
+            Letter Spacing
+            <input id="letterSpacing" type="range" min="-5" max="20" value="0">
+          </label>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- FRAMES -->
+    <div class="tab-content" id="tab-frames">
+
+      <div class="card">
+        <h3>💎 Premium Frame Studio</h3>
+        <p class="hint">Frame में Photo, Video या Live Camera लगाया जा सकता है।</p>
+
+        <div class="frame-grid">
+
+          <button class="frame-btn active" data-frame="none">
+            <i class="frame-preview none-frame"></i>
+            None
+          </button>
+
+          <button class="frame-btn" data-frame="rainbow">
+            <i class="frame-preview rainbow-frame"></i>
+            Rainbow
+          </button>
+
+          <button class="frame-btn" data-frame="neon">
+            <i class="frame-preview neon-frame"></i>
+            Neon
+          </button>
+
+          <button class="frame-btn" data-frame="gold">
+            <i class="frame-preview gold-frame"></i>
+            Gold
+          </button>
+
+          <button class="frame-btn" data-frame="glass">
+            <i class="frame-preview glass-frame"></i>
+            Glass
+          </button>
+
+          <button class="frame-btn" data-frame="cyber">
+            <i class="frame-preview cyber-frame"></i>
+            Cyber
+          </button>
+
+          <button class="frame-btn" data-frame="fire">
+            <i class="frame-preview fire-frame"></i>
+            Fire
+          </button>
+
+          <button class="frame-btn" data-frame="ice">
+            <i class="frame-preview ice-frame"></i>
+            Ice
+          </button>
+
+          <button class="frame-btn" data-frame="film">
+            <i class="frame-preview film-frame"></i>
+            Film
+          </button>
+
+          <button class="frame-btn" data-frame="phone">
+            <i class="frame-preview phone-frame"></i>
+            Phone
+          </button>
+
+          <button class="frame-btn" data-frame="tv">
+            <i class="frame-preview tv-frame"></i>
+            TV
+          </button>
+
+          <button class="frame-btn" data-frame="circle">
+            <i class="frame-preview circle-frame"></i>
+            Circle
+          </button>
+
+          <button class="frame-btn" data-frame="heart">
+            <i class="frame-preview heart-frame"></i>
+            Heart
+          </button>
+
+          <button class="frame-btn" data-frame="premium">
+            <i class="frame-preview premium-frame"></i>
+            Luxury
+          </button>
+
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>📐 Frame Controls</h3>
+
+        <div class="control-grid">
+          <label>
+            X
+            <input id="frameX" type="range" min="-0.45" max="0.45" step="0.01" value="0.27">
+          </label>
+
+          <label>
+            Y
+            <input id="frameY" type="range" min="-0.45" max="0.45" step="0.01" value="0">
+          </label>
+
+          <label>
+            Scale
+            <input id="frameScale" type="range" min="0.15" max="1" step="0.01" value="0.4">
+          </label>
+
+          <label>
+            Rotation
+            <input id="frameRotation" type="range" min="-180" max="180" value="0">
+          </label>
+
+          <label>
+            Border Width
+            <input id="frameWidth" type="range" min="2" max="40" value="10">
+          </label>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- COLOR -->
+    <div class="tab-content" id="tab-color">
+
+      <div class="card">
+        <h3>🎨 Premium Color Looks</h3>
+
+        <div class="look-grid">
+          <button data-look="normal">Original</button>
+          <button data-look="cinematic">🎬 Cinematic</button>
+          <button data-look="vivid">🌈 Vivid</button>
+          <button data-look="hdr">💎 HDR</button>
+          <button data-look="portrait">👤 Portrait</button>
+          <button data-look="warm">🔥 Warm</button>
+          <button data-look="cool">❄️ Cool</button>
+          <button data-look="film">🎞 Film</button>
+          <button data-look="sunset">🌅 Sunset</button>
+          <button data-look="night">🌙 Night</button>
+          <button data-look="mono">⚫ B&W</button>
+          <button data-look="dream">✨ Dream</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>🎚 Manual Color</h3>
+
+        <div class="control-grid">
+          <label>Brightness
+            <input id="brightness" type="range" min="50" max="150" value="100">
+          </label>
+
+          <label>Contrast
+            <input id="contrast" type="range" min="50" max="180" value="100">
+          </label>
+
+          <label>Saturation
+            <input id="saturation" type="range" min="0" max="200" value="100">
+          </label>
+
+          <label>Hue
+            <input id="hue" type="range" min="-180" max="180" value="0">
+          </label>
+
+          <label>Blur
+            <input id="blur" type="range" min="0" max="8" step="0.1" value="0">
+          </label>
+
+          <label>Sepia
+            <input id="sepia" type="range" min="0" max="100" value="0">
+          </label>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- AUDIO -->
+    <div class="tab-content" id="tab-audio">
+
+      <div class="card">
+        <h3>🎙 Audio Mixer</h3>
+
+        <label class="switch-row">
+          <input id="bgAudioEnabled" type="checkbox" checked>
+          <span>Background Video Audio</span>
+        </label>
+
+        <label>
+          Background Volume
+          <input id="bgVolume" type="range" min="0" max="1" step="0.01" value="1">
+        </label>
+
+        <hr>
+
+        <label class="switch-row">
+          <input id="overlayAudioEnabled" type="checkbox">
+          <span>Frame Video Audio</span>
+        </label>
+
+        <label>
+          Frame Video Volume
+          <input id="overlayVolume" type="range" min="0" max="1" step="0.01" value="1">
+        </label>
+
+        <hr>
+
+        <label class="switch-row">
+          <input id="musicEnabled" type="checkbox">
+          <span>Background Music</span>
+        </label>
+
+        <label class="upload">
+          <input id="musicInput" type="file" accept="audio/*">
+          <span>🎵 Music चुनें</span>
+        </label>
+
+        <label>
+          Music Volume
+          <input id="musicVolume" type="range" min="0" max="1" step="0.01" value="0.35">
+        </label>
+      </div>
+
+      <div class="card">
+        <h3>🗣 Human Voice Studio</h3>
+
+        <select id="voiceEffect">
+          <option value="natural">Natural / Original</option>
+          <option value="deep">Natural Deep Male</option>
+          <option value="warm">Warm Human Voice</option>
+          <option value="female">Natural Female Style</option>
+          <option value="young">Young Voice</option>
+          <option value="mature">Mature Voice</option>
+          <option value="radio">Radio Voice</option>
+          <option value="echo">Natural Echo</option>
+          <option value="soft">Soft Voice</option>
+        </select>
+
+        <div class="control-grid">
+          <label>
+            Pitch
+            <input id="voicePitch" type="range" min="-8" max="8" step="0.1" value="0">
+          </label>
+
+          <label>
+            Warmth
+            <input id="voiceWarmth" type="range" min="0" max="100" value="50">
+          </label>
+
+          <label>
+            Clarity
+            <input id="voiceClarity" type="range" min="0" max="100" value="60">
+          </label>
+
+          <label>
+            Reverb
+            <input id="voiceReverb" type="range" min="0" max="100" value="0">
+          </label>
+        </div>
+
+        <p class="hint">
+          Human voice effects browser में Web Audio processing से बनाए जाते हैं।
+          AI-level voice conversion के लिए अलग AI model/API की आवश्यकता होगी।
+        </p>
+      </div>
+
+    </div>
+
+    <!-- EXPORT -->
+    <div class="tab-content" id="tab-export">
+
+      <div class="card">
+        <h3>⚙ Premium Export</h3>
+
+        <div class="control-grid">
+          <label>
+            Quality
+            <select id="exportQuality">
+              <option value="720">HD 720p</option>
+              <option value="1080" selected>Full HD 1080p</option>
+              <option value="1440">2K</option>
+            </select>
+          </label>
+
+          <label>
+            FPS
+            <select id="exportFps">
+              <option value="24">24 FPS</option>
+              <option value="30" selected>30 FPS</option>
+              <option value="60">60 FPS</option>
+            </select>
+          </label>
+
+          <label>
+            Bitrate
+            <select id="exportBitrate">
+              <option value="5000000">5 Mbps</option>
+              <option value="8000000" selected>8 Mbps</option>
+              <option value="12000000">12 Mbps Premium</option>
+              <option value="20000000">20 Mbps Ultra</option>
+            </select>
+          </label>
+        </div>
+
+        <button id="exportBtn2" class="export-large">
+          🎬 Export Premium Video
+        </button>
+
+        <div id="exportProgress" class="progress">
+          <div id="progressBar"></div>
+        </div>
+
+        <div id="exportMessage"></div>
       </div>
 
     </div>
 
   </section>
-
 </main>
 
+<!-- HIDDEN MEDIA -->
+<video id="bgVideo" playsinline crossorigin="anonymous"></video>
+<video id="overlayVideo" playsinline crossorigin="anonymous"></video>
+<video id="bgCameraVideo" playsinline autoplay muted></video>
+<video id="frameCameraVideo" playsinline autoplay muted></video>
 
-<!-- EXPORT -->
+<audio id="musicAudio" crossorigin="anonymous"></audio>
 
-<section
-  class="export-panel"
-  id="progressBox">
-
-  <h2>🎬 Export</h2>
-
-  <label>
-    Export Format
-
-    <select id="exportFormat">
-
-      <option value="webm">
-        WebM - Fast
-      </option>
-
-      <option value="mp4">
-        MP4
-      </option>
-
-    </select>
-
-  </label>
-
-
-  <div
-    class="progress-container">
-
-    <div
-      id="progressBar"
-      class="progress-bar">
-    </div>
-
-  </div>
-
-
-  <p id="progressText">
-    Ready
-  </p>
-
-
-  <div
-    id="downloadBox"
-    class="download-box">
-  </div>
-
-</section>
-
-
-<script src="app.js"></script>
-
+<script src="/app.js"></script>
 </body>
-</html>
+  </html>
