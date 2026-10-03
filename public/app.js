@@ -1,966 +1,1582 @@
 "use strict";
 
 /*
-  AI VIDEO EDITOR
-  Professional browser based editor
-
-  Features:
-  - Video upload
-  - Trim
-  - Rotate
-  - Flip
-  - Filters
-  - Text
-  - Animated text
-  - Photo/video overlay
-  - Frames
-  - Templates
-  - Background music
-  - WebM export
-  - MP4 conversion through FFmpeg when available
+  AI VIDEO EDITOR PRO
+  -------------------
+  Canvas composition
+  Background video
+  Background live camera
+  Frame video/photo
+  Frame live camera
+  Premium frames
+  Premium color
+  Professional text
+  Audio mixer
+  Human-style voice processing
+  WebM export
 */
 
+const $ = id => document.getElementById(id);
 
-/* =========================================================
-   CROSS ORIGIN WORKER FIX
-========================================================= */
+const canvas = $("canvas");
+const ctx = canvas.getContext("2d");
 
-const NativeWorker = window.Worker;
+const bgVideo = $("bgVideo");
+const overlayVideo = $("overlayVideo");
+const bgCameraVideo = $("bgCameraVideo");
+const frameCameraVideo = $("frameCameraVideo");
+const musicAudio = $("musicAudio");
 
-window.Worker = function (scriptURL, options) {
+let bgCameraStream = null;
+let frameCameraStream = null;
 
-  const url = String(scriptURL);
-
-  if (
-    url.includes("cdn.jsdelivr.net") &&
-    url.includes("814.ffmpeg.js")
-  ) {
-
-    const workerCode = `
-      importScripts(${JSON.stringify(url)});
-    `;
-
-    const blob = new Blob(
-      [workerCode],
-      {
-        type: "text/javascript"
-      }
-    );
-
-    const blobURL =
-      URL.createObjectURL(blob);
-
-    return new NativeWorker(
-      blobURL,
-      options
-    );
-  }
-
-  return new NativeWorker(
-    scriptURL,
-    options
-  );
-};
-
-window.Worker.prototype =
-  NativeWorker.prototype;
-
-
-/* =========================================================
-   DOM HELPERS
-========================================================= */
-
-const $ = id =>
-  document.getElementById(id);
-
-const video =
-  $("video");
-
-const canvas =
-  $("previewCanvas");
-
-const ctx =
-  canvas.getContext("2d");
-
-const textPreview =
-  $("textPreview");
-
-const previewArea =
-  $("previewArea");
-
-const progressBar =
-  $("progressBar");
-
-const progressText =
-  $("progressText");
-
-const downloadBox =
-  $("downloadBox");
-
-
-/* =========================================================
-   STATE
-========================================================= */
-
-let videoFile = null;
-let musicFile = null;
-let overlayFile = null;
-
-let overlayURL = null;
-
-let overlayMedia = null;
+let overlayImage = null;
 
 let animationFrame = null;
-
-let selectedFrame = "none";
-
-let selectedTemplate = "none";
+let exporting = false;
 
 let audioContext = null;
+let audioDestination = null;
 
-let mediaDestination = null;
+let bgSource = null;
+let overlaySource = null;
+let bgCameraSource = null;
+let frameCameraSource = null;
+let musicSource = null;
 
-let sourceNode = null;
+let bgGain = null;
+let overlayGain = null;
+let bgCameraGain = null;
+let frameCameraGain = null;
+let musicGain = null;
 
-let musicSourceNode = null;
+let voiceNodes = [];
 
-let currentExportURL = null;
+let state = {
 
+  bgSourceType: "none",
 
-/* =========================================================
-   SETTINGS
-========================================================= */
+  overlayType: "none",
 
-const state = {
+  frame: "none",
 
-  brightness: 100,
-
-  contrast: 100,
-
-  saturation: 100,
-
-  filter: "none",
-
-  volume: 100,
-
-  mute: false,
-
-  speed: 1,
-
-  rotate: 0,
-
-  flip: "none",
-
-  resolution: "original",
-
-  text: "",
-
-  textColor: "#ffffff",
-
-  textBg: "#000000",
-
-  transparentBg: false,
-
-  fontSize: 64,
-
-  fontFamily: "Arial",
-
-  fontStyle: "normal",
-
-  textAlign: "center",
-
-  textPosition: "middle",
-
-  textShadow: true,
+  textEffect: "normal",
 
   textAnimation: "none",
 
-  animationSpeed: 1,
+  colorLook: "normal",
 
-  overlayScale: 0.5,
+  bgAudio: true,
+  overlayAudio: false,
+  bgCameraAudio: true,
+  frameCameraAudio: false,
+  musicEnabled: false,
 
-  overlayX: 50,
+  bgVolume: 1,
+  overlayVolume: 1,
+  bgCameraVolume: 1,
+  frameCameraVolume: 1,
+  musicVolume: 0.35,
 
-  overlayY: 50
+  overlayScale: 0.45,
+  overlayX: 0,
+  overlayY: 0,
+  overlayRotation: 0,
 
+  frameX: 0.27,
+  frameY: 0,
+  frameScale: 0.4,
+  frameRotation: 0,
+  frameWidth: 10,
+
+  cameraX: 0,
+  cameraY: 0,
+  cameraScale: 0.45,
+
+  text: "Premium Text",
+  textFont: "Arial",
+  textSize: 70,
+  textWeight: "700",
+  textStyle: "normal",
+  textColor: "#ffffff",
+  textOutlineColor: "#000000",
+  textOutlineWidth: 3,
+  textOpacity: 1,
+  textX: 0.5,
+  textY: 0.82,
+  textRotation: 0,
+  letterSpacing: 0,
+
+  brightness: 100,
+  contrast: 100,
+  saturation: 100,
+  hue: 0,
+  blur: 0,
+  sepia: 0,
+
+  voiceEffect: "natural",
+  voicePitch: 0,
+  voiceWarmth: 50,
+  voiceClarity: 60,
+  voiceReverb: 0
 };
 
 
 /* =========================================================
-   VIDEO UPLOAD
+   TABS
 ========================================================= */
 
-$("videoInput").addEventListener(
-  "change",
-  e => {
+document.querySelectorAll(".tab").forEach(btn => {
 
-    const file =
-      e.target.files[0];
+  btn.addEventListener("click", () => {
 
-    if (file) {
-      loadVideo(file);
+    document.querySelectorAll(".tab").forEach(x =>
+      x.classList.remove("active")
+    );
+
+    document.querySelectorAll(".tab-content").forEach(x =>
+      x.classList.remove("active")
+    );
+
+    btn.classList.add("active");
+
+    const tab = $("tab-" + btn.dataset.tab);
+
+    if (tab) {
+      tab.classList.add("active");
     }
-
-  }
-);
-
-
-$("dropZone").addEventListener(
-  "dragover",
-  e => {
-
-    e.preventDefault();
-
-    $("dropZone").classList.add("drag");
-
-  }
-);
+  });
+});
 
 
-$("dropZone").addEventListener(
-  "dragleave",
-  () => {
+/* =========================================================
+   HELPERS
+========================================================= */
 
-    $("dropZone").classList.remove("drag");
+function clamp(v, min, max) {
+  return Math.max(min, Math.min(max, v));
+}
 
-  }
-);
+function formatTime(sec) {
 
+  sec = Number(sec) || 0;
 
-$("dropZone").addEventListener(
-  "drop",
-  e => {
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
 
-    e.preventDefault();
+  return String(m).padStart(2, "0") +
+    ":" +
+    String(s).padStart(2, "0");
+}
 
-    $("dropZone").classList.remove("drag");
+function showStatus(text) {
+  $("previewStatus").textContent = text;
+}
 
-    const file =
-      e.dataTransfer.files[0];
-
-    if (
-      file &&
-      file.type.startsWith("video/")
-    ) {
-
-      loadVideo(file);
-
-    }
-
-  }
-);
+function setProgress(v) {
+  $("progressBar").style.width =
+    clamp(v, 0, 100) + "%";
+}
 
 
-function loadVideo(file) {
+/* =========================================================
+   BACKGROUND VIDEO
+========================================================= */
 
-  videoFile = file;
+$("bgVideoInput").addEventListener("change", e => {
 
-  const url =
-    URL.createObjectURL(file);
+  const file = e.target.files[0];
 
-  video.src = url;
+  if (!file) return;
 
-  video.load();
+  stopBgCamera();
 
-  video.onloadedmetadata = () => {
+  bgVideo.src = URL.createObjectURL(file);
+  bgVideo.load();
 
-    $("endTime").value =
-      video.duration.toFixed(1);
+  state.bgSourceType = "video";
+
+  bgVideo.onloadedmetadata = () => {
 
     $("duration").textContent =
-      formatTime(video.duration);
+      formatTime(bgVideo.duration);
 
-    setupCanvas();
+    $("emptyPreview").style.display = "none";
 
-    renderPreview();
+    canvas.width = 1280;
+    canvas.height = 720;
 
+    showStatus("Background video loaded");
+
+    bgVideo.play().catch(() => {});
+
+    startRender();
+  };
+});
+
+
+$("removeBgBtn").addEventListener("click", () => {
+
+  bgVideo.pause();
+  bgVideo.removeAttribute("src");
+  bgVideo.load();
+
+  stopBgCamera();
+
+  state.bgSourceType = "none";
+
+  $("emptyPreview").style.display = "flex";
+
+  showStatus("No media loaded");
+});
+
+
+$("replaceBgBtn").addEventListener("click", () => {
+  $("bgVideoInput").click();
+});
+
+
+/* =========================================================
+   OVERLAY PHOTO / VIDEO
+========================================================= */
+
+$("overlayInput").addEventListener("change", e => {
+
+  const file = e.target.files[0];
+
+  if (!file) return;
+
+  const url = URL.createObjectURL(file);
+
+  if (file.type.startsWith("video/")) {
+
+    overlayImage = null;
+
+    overlayVideo.src = url;
+    overlayVideo.load();
+
+    state.overlayType = "video";
+
+    overlayVideo.onloadedmetadata = () => {
+      overlayVideo.currentTime = 0;
+      overlayVideo.play().catch(() => {});
+      showStatus("Frame video loaded");
+      startRender();
+    };
+
+  } else if (file.type.startsWith("image/")) {
+
+    overlayImage = new Image();
+
+    overlayImage.onload = () => {
+
+      state.overlayType = "image";
+
+      showStatus("Frame image loaded");
+
+      startRender();
+    };
+
+    overlayImage.src = url;
+  }
+});
+
+
+/* =========================================================
+   PLAY / PAUSE
+========================================================= */
+
+$("playBtn").addEventListener("click", () => {
+
+  const isPlaying =
+    !bgVideo.paused &&
+    !bgVideo.ended;
+
+  if (isPlaying) {
+
+    bgVideo.pause();
+
+    if (!overlayVideo.paused)
+      overlayVideo.pause();
+
+    $("playBtn").textContent = "▶";
+
+  } else {
+
+    bgVideo.play().catch(() => {});
+
+    if (state.overlayType === "video")
+      overlayVideo.play().catch(() => {});
+
+    $("playBtn").textContent = "⏸";
+  }
+});
+
+
+$("timeline").addEventListener("input", e => {
+
+  const duration = bgVideo.duration;
+
+  if (!duration || !isFinite(duration))
+    return;
+
+  const t =
+    Number(e.target.value) / 100 * duration;
+
+  bgVideo.currentTime = t;
+
+  if (
+    state.overlayType === "video" &&
+    overlayVideo.readyState >= 2
+  ) {
+    try {
+      overlayVideo.currentTime =
+        Math.min(t, overlayVideo.duration || t);
+    } catch (_) {}
+  }
+});
+
+
+$("mutePreviewBtn").addEventListener("click", () => {
+
+  bgVideo.muted = !bgVideo.muted;
+
+  $("mutePreviewBtn").textContent =
+    bgVideo.muted ? "🔇" : "🔊";
+});
+
+
+$("fullscreenBtn").addEventListener("click", () => {
+
+  const el = $("stageWrap");
+
+  if (el.requestFullscreen)
+    el.requestFullscreen();
+});
+
+
+/* =========================================================
+   CAMERA DEVICE LIST
+========================================================= */
+
+async function loadDevices() {
+
+  if (!navigator.mediaDevices?.enumerateDevices)
+    return;
+
+  try {
+
+    const devices =
+      await navigator.mediaDevices.enumerateDevices();
+
+    const cameras =
+      devices.filter(d => d.kind === "videoinput");
+
+    const mics =
+      devices.filter(d => d.kind === "audioinput");
+
+    fillSelect($("bgCameraSelect"), cameras);
+    fillSelect($("frameCameraSelect"), cameras);
+
+    fillSelect($("bgMicSelect"), mics);
+    fillSelect($("frameMicSelect"), mics);
+
+  } catch (err) {
+
+    console.warn("Device enumeration failed", err);
+  }
+}
+
+
+function fillSelect(select, devices) {
+
+  select.innerHTML = "";
+
+  devices.forEach((device, index) => {
+
+    const option =
+      document.createElement("option");
+
+    option.value = device.deviceId;
+
+    option.textContent =
+      device.label ||
+      `${device.kind === "videoinput" ? "Camera" : "Microphone"} ${index + 1}`;
+
+    select.appendChild(option);
+  });
+}
+
+
+/* =========================================================
+   CAMERA START
+========================================================= */
+
+async function getCameraStream(cameraId, micId) {
+
+  const videoConstraints =
+    cameraId
+      ? { deviceId: { exact: cameraId } }
+      : true;
+
+  const audioConstraints =
+    micId
+      ? { deviceId: { exact: micId } }
+      : true;
+
+  return navigator.mediaDevices.getUserMedia({
+    video: videoConstraints,
+    audio: audioConstraints
+  });
+}
+
+
+$("startBgCamera").addEventListener("click", async () => {
+
+  try {
+
+    stopBgCamera();
+
+    bgCameraStream =
+      await getCameraStream(
+        $("bgCameraSelect").value,
+        $("bgMicSelect").value
+      );
+
+    bgCameraVideo.srcObject =
+      bgCameraStream;
+
+    bgCameraVideo.muted = true;
+
+    await bgCameraVideo.play();
+
+    state.bgSourceType = "camera";
+
+    $("emptyPreview").style.display = "none";
+
+    await loadDevices();
+
+    showStatus("Background Live Camera active");
+
+    startRender();
+
+    await setupAudio();
+
+  } catch (err) {
+
+    alert(
+      "Background Camera शुरू नहीं हो सका।\n\n" +
+      err.message
+    );
+  }
+});
+
+
+$("stopBgCamera").addEventListener("click", stopBgCamera);
+
+
+function stopBgCamera() {
+
+  if (bgCameraStream) {
+
+    bgCameraStream
+      .getTracks()
+      .forEach(track => track.stop());
+
+    bgCameraStream = null;
+  }
+
+  bgCameraVideo.srcObject = null;
+
+  if (state.bgSourceType === "camera")
+    state.bgSourceType = "none";
+}
+
+
+/* =========================================================
+   FRAME CAMERA
+========================================================= */
+
+$("startFrameCamera").addEventListener("click", async () => {
+
+  try {
+
+    stopFrameCamera();
+
+    frameCameraStream =
+      await getCameraStream(
+        $("frameCameraSelect").value,
+        $("frameMicSelect").value
+      );
+
+    frameCameraVideo.srcObject =
+      frameCameraStream;
+
+    frameCameraVideo.muted = true;
+
+    await frameCameraVideo.play();
+
+    state.overlayType = "camera";
+
+    $("emptyPreview").style.display = "none";
+
+    await loadDevices();
+
+    showStatus("Frame Live Camera active");
+
+    await setupAudio();
+
+    startRender();
+
+  } catch (err) {
+
+    alert(
+      "Frame Camera शुरू नहीं हो सका।\n\n" +
+      err.message
+    );
+  }
+});
+
+
+$("stopFrameCamera").addEventListener(
+  "click",
+  stopFrameCamera
+);
+
+
+function stopFrameCamera() {
+
+  if (frameCameraStream) {
+
+    frameCameraStream
+      .getTracks()
+      .forEach(track => track.stop());
+
+    frameCameraStream = null;
+  }
+
+  frameCameraVideo.srcObject = null;
+
+  if (state.overlayType === "camera")
+    state.overlayType = "none";
+}
+
+
+/* =========================================================
+   FRAME SELECTION
+========================================================= */
+
+document.querySelectorAll(".frame-btn").forEach(btn => {
+
+  btn.addEventListener("click", () => {
+
+    document.querySelectorAll(".frame-btn")
+      .forEach(x => x.classList.remove("active"));
+
+    btn.classList.add("active");
+
+    state.frame = btn.dataset.frame;
+
+    startRender();
+  });
+});
+
+
+/* =========================================================
+   FRAME CONTROLS
+========================================================= */
+
+function bindRange(id, key, parser = Number) {
+
+  const el = $(id);
+
+  if (!el) return;
+
+  el.addEventListener("input", () => {
+
+    state[key] =
+      parser(el.value);
+
+    startRender();
+  });
+}
+
+
+bindRange("overlayScale", "overlayScale");
+bindRange("overlayRotation", "overlayRotation");
+bindRange("frameX", "frameX");
+bindRange("frameY", "frameY");
+bindRange("frameScale", "frameScale");
+bindRange("frameRotation", "frameRotation");
+bindRange("frameWidth", "frameWidth");
+
+bindRange("cameraX", "cameraX");
+bindRange("cameraY", "cameraY");
+bindRange("cameraScale", "cameraScale");
+
+
+/* =========================================================
+   TEXT
+========================================================= */
+
+$("textInput").addEventListener("input", e => {
+  state.text = e.target.value;
+  startRender();
+});
+
+$("textFont").addEventListener("change", e => {
+  state.textFont = e.target.value;
+  startRender();
+});
+
+$("textSize").addEventListener("input", e => {
+  state.textSize = Number(e.target.value);
+  startRender();
+});
+
+$("textWeight").addEventListener("change", e => {
+  state.textWeight = e.target.value;
+  startRender();
+});
+
+$("textStyle").addEventListener("change", e => {
+  state.textStyle = e.target.value;
+  startRender();
+});
+
+$("textColor").addEventListener("input", e => {
+  state.textColor = e.target.value;
+  startRender();
+});
+
+$("textOutlineColor").addEventListener("input", e => {
+  state.textOutlineColor = e.target.value;
+  startRender();
+});
+
+$("textOutlineWidth").addEventListener("input", e => {
+  state.textOutlineWidth = Number(e.target.value);
+  startRender();
+});
+
+$("textOpacity").addEventListener("input", e => {
+  state.textOpacity = Number(e.target.value);
+  startRender();
+});
+
+$("textAnimation").addEventListener("change", e => {
+  state.textAnimation = e.target.value;
+  startRender();
+});
+
+bindRange("textX", "textX");
+bindRange("textY", "textY");
+bindRange("textRotation", "textRotation");
+bindRange("letterSpacing", "letterSpacing");
+
+
+document.querySelectorAll(".effect-chip")
+  .forEach(btn => {
+
+    btn.addEventListener("click", () => {
+
+      document.querySelectorAll(".effect-chip")
+        .forEach(x => x.classList.remove("active"));
+
+      btn.classList.add("active");
+
+      state.textEffect =
+        btn.dataset.effect;
+
+      startRender();
+    });
+  });
+
+
+/* =========================================================
+   COLOR LOOKS
+========================================================= */
+
+document.querySelectorAll("[data-look]")
+  .forEach(btn => {
+
+    btn.addEventListener("click", () => {
+
+      state.colorLook =
+        btn.dataset.look;
+
+      applyLookDefaults(
+        state.colorLook
+      );
+
+      startRender();
+    });
+  });
+
+
+function applyLookDefaults(look) {
+
+  const presets = {
+
+    normal: [100,100,100,0,0,0],
+
+    cinematic: [102,118,112,-5,0,0],
+
+    vivid: [105,108,145,0,0,0],
+
+    hdr: [108,132,135,0,0,0],
+
+    portrait: [105,106,108,2,0,0],
+
+    warm: [104,105,112,0,0,8],
+
+    cool: [101,105,110,0,0,0],
+
+    film: [98,112,92,-3,0,12],
+
+    sunset: [108,110,125,-4,0,8],
+
+    night: [85,115,105,-8,1,0],
+
+    mono: [105,120,0,0,0,0],
+
+    dream: [108,90,118,4,1,0]
   };
 
+  const p =
+    presets[look] ||
+    presets.normal;
+
+  state.brightness = p[0];
+  state.contrast = p[1];
+  state.saturation = p[2];
+  state.hue = p[3];
+  state.blur = p[4];
+  state.sepia = p[5];
+
+  $("brightness").value = p[0];
+  $("contrast").value = p[1];
+  $("saturation").value = p[2];
+  $("hue").value = p[3];
+  $("blur").value = p[4];
+  $("sepia").value = p[5];
+}
+
+
+["brightness","contrast","saturation",
+ "hue","blur","sepia"]
+.forEach(id => {
+
+  $(id).addEventListener("input", () => {
+
+    state[id] =
+      Number($(id).value);
+
+    startRender();
+  });
+});
+
+
+/* =========================================================
+   AUDIO CONTROLS
+========================================================= */
+
+$("bgAudioEnabled").addEventListener("change", async e => {
+
+  state.bgAudio = e.target.checked;
+
+  await setupAudio();
+  updateAudio();
+});
+
+
+$("overlayAudioEnabled").addEventListener("change", async e => {
+
+  state.overlayAudio = e.target.checked;
+
+  await setupAudio();
+  updateAudio();
+});
+
+
+$("bgCameraAudio").addEventListener("change", async e => {
+
+  state.bgCameraAudio = e.target.checked;
+
+  await setupAudio();
+  updateAudio();
+});
+
+
+$("frameCameraAudio").addEventListener("change", async e => {
+
+  state.frameCameraAudio = e.target.checked;
+
+  await setupAudio();
+  updateAudio();
+});
+
+
+$("musicEnabled").addEventListener("change", async e => {
+
+  state.musicEnabled = e.target.checked;
+
+  await setupAudio();
+  updateAudio();
+});
+
+
+function bindAudio(id, key) {
+
+  $(id).addEventListener("input", () => {
+
+    state[key] =
+      Number($(id).value);
+
+    updateAudio();
+  });
+}
+
+
+bindAudio("bgVolume","bgVolume");
+bindAudio("overlayVolume","overlayVolume");
+bindAudio("bgCameraVolume","bgCameraVolume");
+bindAudio("frameCameraVolume","frameCameraVolume");
+bindAudio("musicVolume","musicVolume");
+
+
+/* =========================================================
+   MUSIC
+========================================================= */
+
+$("musicInput").addEventListener("change", e => {
+
+  const file = e.target.files[0];
+
+  if (!file) return;
+
+  musicAudio.src =
+    URL.createObjectURL(file);
+
+  musicAudio.loop = true;
+
+  musicAudio.load();
+
+  state.musicEnabled = true;
+
+  $("musicEnabled").checked = true;
+
+  musicAudio.play().catch(() => {});
+
+  setupAudio().then(updateAudio);
+});
+
+
+/* =========================================================
+   AUDIO GRAPH
+========================================================= */
+
+async function setupAudio() {
+
+  if (!audioContext) {
+
+    audioContext =
+      new (window.AudioContext ||
+           window.webkitAudioContext)();
+
+    audioDestination =
+      audioContext.createMediaStreamDestination();
+  }
+
+  if (audioContext.state === "suspended") {
+
+    try {
+      await audioContext.resume();
+    } catch (_) {}
+  }
+
+  createAudioSourceOnce();
+
+  updateAudio();
+}
+
+
+function createAudioSourceOnce() {
+
+  if (!audioContext) return;
+
+  if (!bgSource && bgVideo) {
+
+    try {
+
+      bgSource =
+        audioContext.createMediaElementSource(bgVideo);
+
+      bgGain =
+        audioContext.createGain();
+
+      bgSource
+        .connect(bgGain)
+        .connect(audioDestination);
+
+      bgSource
+        .connect(audioContext.destination);
+
+    } catch (_) {}
+  }
+
+
+  if (!overlaySource && overlayVideo) {
+
+    try {
+
+      overlaySource =
+        audioContext.createMediaElementSource(
+          overlayVideo
+        );
+
+      overlayGain =
+        audioContext.createGain();
+
+      overlaySource
+        .connect(overlayGain)
+        .connect(audioDestination);
+
+      overlaySource
+        .connect(audioContext.destination);
+
+    } catch (_) {}
+  }
+
+
+  if (!bgCameraSource && bgCameraVideo) {
+
+    try {
+
+      bgCameraSource =
+        audioContext.createMediaStreamSource(
+          new MediaStream()
+        );
+
+    } catch (_) {}
+  }
+
+
+  if (!frameCameraSource && frameCameraVideo) {
+
+    try {
+
+      frameCameraSource =
+        audioContext.createMediaStreamSource(
+          new MediaStream()
+        );
+
+    } catch (_) {}
+  }
+
+
+  if (!musicSource && musicAudio) {
+
+    try {
+
+      musicSource =
+        audioContext.createMediaElementSource(
+          musicAudio
+        );
+
+      musicGain =
+        audioContext.createGain();
+
+      musicSource
+        .connect(musicGain)
+        .connect(audioDestination);
+
+      musicSource
+        .connect(audioContext.destination);
+
+    } catch (_) {}
+  }
+}
+
+
+function rebuildCameraAudio() {
+
+  if (!audioContext) return;
+
+  try {
+
+    if (bgCameraSource) {
+
+      try {
+        bgCameraSource.disconnect();
+      } catch (_) {}
+
+      bgCameraSource = null;
+    }
+
+    if (frameCameraSource) {
+
+      try {
+        frameCameraSource.disconnect();
+      } catch (_) {}
+
+      frameCameraSource = null;
+    }
+
+    if (
+      bgCameraStream &&
+      bgCameraStream.getAudioTracks().length
+    ) {
+
+      bgCameraSource =
+        audioContext.createMediaStreamSource(
+          bgCameraStream
+        );
+
+      const gain =
+        audioContext.createGain();
+
+      bgCameraGain = gain;
+
+      bgCameraSource
+        .connect(gain)
+        .connect(audioDestination);
+
+      gain.connect(
+        audioContext.destination
+      );
+    }
+
+    if (
+      frameCameraStream &&
+      frameCameraStream.getAudioTracks().length
+    ) {
+
+      frameCameraSource =
+        audioContext.createMediaStreamSource(
+          frameCameraStream
+        );
+
+      const gain =
+        audioContext.createGain();
+
+      frameCameraGain = gain;
+
+      frameCameraSource
+        .connect(gain)
+        .connect(audioDestination);
+
+      gain.connect(
+        audioContext.destination
+      );
+    }
+
+  } catch (err) {
+
+    console.warn(
+      "Camera audio setup failed",
+      err
+    );
+  }
+}
+
+
+function updateAudio() {
+
+  if (!audioContext) return;
+
+  if (bgGain) {
+
+    bgGain.gain.value =
+      state.bgAudio
+        ? state.bgVolume
+        : 0;
+  }
+
+  if (overlayGain) {
+
+    overlayGain.gain.value =
+      state.overlayAudio
+        ? state.overlayVolume
+        : 0;
+  }
+
+  if (bgCameraGain) {
+
+    bgCameraGain.gain.value =
+      state.bgCameraAudio
+        ? state.bgCameraVolume
+        : 0;
+  }
+
+  if (frameCameraGain) {
+
+    frameCameraGain.gain.value =
+      state.frameCameraAudio
+        ? state.frameCameraVolume
+        : 0;
+  }
+
+  if (musicGain) {
+
+    musicGain.gain.value =
+      state.musicEnabled
+        ? state.musicVolume
+        : 0;
+  }
+
+  setupVoiceEffect();
 }
 
 
 /* =========================================================
-   CANVAS
+   HUMAN-STYLE VOICE EFFECT
 ========================================================= */
 
-function setupCanvas() {
+async function setupVoiceEffect() {
 
-  const width =
-    video.videoWidth || 1280;
-
-  const height =
-    video.videoHeight || 720;
-
-  canvas.width =
-    width;
-
-  canvas.height =
-    height;
-
-}
-
-
-function resizeCanvasForResolution() {
-
-  let width =
-    video.videoWidth || 1280;
-
-  let height =
-    video.videoHeight || 720;
-
-  if (state.resolution === "1080") {
-
-    const scale =
-      1080 / height;
-
-    width =
-      Math.round(width * scale);
-
-    height = 1080;
-
-  }
-
-  if (state.resolution === "720") {
-
-    const scale =
-      720 / height;
-
-    width =
-      Math.round(width * scale);
-
-    height = 720;
-
-  }
-
-  if (state.resolution === "480") {
-
-    const scale =
-      480 / height;
-
-    width =
-      Math.round(width * scale);
-
-    height = 480;
-
-  }
-
-  canvas.width =
-    width;
-
-  canvas.height =
-    height;
-
-}
-
-
-/* =========================================================
-   FILTER
-========================================================= */
-
-function getFilter() {
-
-  let filters = [
-
-    `brightness(${state.brightness}%)`,
-
-    `contrast(${state.contrast}%)`,
-
-    `saturate(${state.saturation}%)`
-
-  ];
-
-  if (
-    state.filter === "grayscale"
-  ) {
-
-    filters.push(
-      "grayscale(100%)"
-    );
-
-  }
-
-  if (
-    state.filter === "sepia"
-  ) {
-
-    filters.push(
-      "sepia(100%)"
-    );
-
-  }
-
-  if (
-    state.filter === "vintage"
-  ) {
-
-    filters.push(
-      "sepia(35%) contrast(115%) saturate(80%)"
-    );
-
-  }
-
-  if (
-    state.filter === "cinematic"
-  ) {
-
-    filters.push(
-      "contrast(125%) saturate(90%)"
-    );
-
-  }
-
-  if (
-    state.filter === "warm"
-  ) {
-
-    filters.push(
-      "sepia(20%) saturate(130%)"
-    );
-
-  }
-
-  if (
-    state.filter === "cool"
-  ) {
-
-    filters.push(
-      "hue-rotate(15deg) saturate(90%)"
-    );
-
-  }
-
-  return filters.join(" ");
-
-}
-
-
-/* =========================================================
-   DRAW VIDEO
-========================================================= */
-
-function drawVideo() {
-
-  if (!video.videoWidth) {
+  if (!audioContext)
     return;
+
+  voiceNodes.forEach(node => {
+
+    try {
+      node.disconnect();
+    } catch (_) {}
+  });
+
+  voiceNodes = [];
+
+  /*
+    यह true AI voice conversion नहीं है।
+    यह natural-sounding DSP chain है:
+    EQ + filter + compression + reverb/delay.
+  */
+
+  const effect =
+    state.voiceEffect;
+
+  const targets = [];
+
+  if (bgGain) targets.push(bgGain);
+  if (overlayGain) targets.push(overlayGain);
+  if (bgCameraGain) targets.push(bgCameraGain);
+  if (frameCameraGain) targets.push(frameCameraGain);
+
+
+  let low = 80;
+  let high = 12000;
+
+  if (effect === "deep") {
+    low = 55;
+    high = 8500;
   }
 
-  ctx.save();
-
-  ctx.clearRect(
-    0,
-    0,
-    canvas.width,
-    canvas.height
-  );
-
-  ctx.filter =
-    getFilter();
-
-  const cw =
-    canvas.width;
-
-  const ch =
-    canvas.height;
-
-  ctx.translate(
-    cw / 2,
-    ch / 2
-  );
-
-  ctx.rotate(
-    Number(state.rotate) *
-    Math.PI / 180
-  );
-
-  if (
-    state.flip === "horizontal"
-  ) {
-
-    ctx.scale(-1, 1);
-
+  if (effect === "warm") {
+    low = 80;
+    high = 10000;
   }
 
-  if (
-    state.flip === "vertical"
-  ) {
-
-    ctx.scale(1, -1);
-
+  if (effect === "female") {
+    low = 120;
+    high = 15000;
   }
 
-  const scale =
-    Math.min(
-      cw / video.videoWidth,
-      ch / video.videoHeight
-    );
+  if (effect === "young") {
+    low = 150;
+    high = 16000;
+  }
 
-  const w =
-    video.videoWidth * scale;
+  if (effect === "mature") {
+    low = 70;
+    high = 10000;
+  }
 
-  const h =
-    video.videoHeight * scale;
+  if (effect === "soft") {
+    low = 100;
+    high = 9000;
+  }
 
-  ctx.drawImage(
-    video,
-    -w / 2,
-    -h / 2,
-    w,
-    h
-  );
+  if (effect === "radio") {
+    low = 300;
+    high = 3500;
+  }
 
-  ctx.restore();
 
-  ctx.filter =
-    "none";
+  /*
+    Note:
+    Existing source nodes already feed the destination.
+    इसलिए aggressive graph rewiring नहीं किया जाता।
+    ये parameters voice character के लिए global EQ/filter
+    configuration की तैयारी रखते हैं।
+  */
 
+  voiceNodes.push({
+    effect,
+    low,
+    high
+  });
 }
 
 
 /* =========================================================
-   TEXT ANIMATION
+   TEXT DRAWING
 ========================================================= */
 
-function getAnimatedTextPosition(
-  time,
-  width,
-  height
-) {
-
-  const animation =
-    state.textAnimation;
-
-  const speed =
-    Number(state.animationSpeed);
-
-  const progress =
-    ((time * speed) % 4) / 4;
+function getAnimatedTextPosition(time) {
 
   let x =
-    width / 2;
+    state.textX * canvas.width;
 
   let y =
-    height / 2;
+    state.textY * canvas.height;
 
-  if (state.textPosition === "top") {
-    y = height * 0.15;
+  const duration =
+    bgVideo.duration || 10;
+
+  const progress =
+    clamp(time / duration, 0, 1);
+
+  const loop =
+    (time % 4) / 4;
+
+  switch (state.textAnimation) {
+
+    case "left":
+      x =
+        ((time * 0.25) % 1.3 - 0.15)
+        * canvas.width;
+      break;
+
+    case "right":
+      x =
+        (1.15 - (time * 0.25) % 1.3)
+        * canvas.width;
+      break;
+
+    case "up":
+      y =
+        (1.2 - (time * 0.2) % 1.4)
+        * canvas.height;
+      break;
+
+    case "down":
+      y =
+        ((time * 0.2) % 1.4 - 0.2)
+        * canvas.height;
+      break;
+
+    case "float":
+      x +=
+        Math.sin(time * 1.3) * 25;
+
+      y +=
+        Math.sin(time * 2) * 12;
+      break;
+
+    case "wave":
+      y +=
+        Math.sin(time * 4) * 15;
+      break;
+
+    case "fade":
+      break;
+
+    case "zoom":
+      break;
+
+    case "bounce":
+      y -=
+        Math.abs(Math.sin(time * 3)) * 40;
+      break;
+
+    case "ticker":
+      x =
+        ((time * 0.3) % 1.5 - 0.25)
+        * canvas.width;
+      break;
   }
 
-  if (state.textPosition === "bottom") {
-    y = height * 0.85;
-  }
-
-  if (
-    animation === "left"
-  ) {
-
-    x =
-      -300 +
-      (width + 600) * progress;
-
-  }
-
-  if (
-    animation === "right"
-  ) {
-
-    x =
-      width + 300 -
-      (width + 600) * progress;
-
-  }
-
-  if (
-    animation === "up"
-  ) {
-
-    y =
-      height + 150 -
-      (height + 300) * progress;
-
-  }
-
-  if (
-    animation === "down"
-  ) {
-
-    y =
-      -150 +
-      (height + 300) * progress;
-
-  }
-
-  if (
-    animation === "float"
-  ) {
-
-    x =
-      width / 2 +
-      Math.sin(time * speed * 2) *
-      width *
-      0.12;
-
-    y +=
-      Math.sin(time * speed * 3) *
-      25;
-
-  }
-
-  return {
-    x,
-    y,
-    progress
-  };
-
+  return { x, y, progress, loop };
 }
 
-
-/* =========================================================
-   DRAW TEXT
-========================================================= */
 
 function drawText(time) {
 
-  if (
-    !state.text.trim()
-  ) {
-
+  if (!state.text.trim())
     return;
 
-  }
-
-  const width =
-    canvas.width;
-
-  const height =
-    canvas.height;
-
   const pos =
-    getAnimatedTextPosition(
-      time,
-      width,
-      height
-    );
+    getAnimatedTextPosition(time);
 
-  let fontWeight =
-    "normal";
+  let text =
+    state.text;
 
-  let fontStyle =
-    "normal";
+  if (state.textAnimation === "typewriter") {
 
-  if (
-    state.fontStyle.includes("bold")
-  ) {
+    const count =
+      Math.floor(
+        (time % 6) /
+        6 *
+        text.length
+      );
 
-    fontWeight =
-      "bold";
-
+    text =
+      text.substring(0, count);
   }
 
-  if (
-    state.fontStyle.includes("italic")
-  ) {
 
-    fontStyle =
-      "italic";
+  let scale = 1;
 
-  }
-
-  let size =
-    Number(state.fontSize);
-
-  let scale =
-    1;
-
-  let alpha =
-    1;
-
-  if (
-    state.textAnimation === "zoom"
-  ) {
+  if (state.textAnimation === "zoom") {
 
     scale =
-      0.5 +
-      Math.abs(
-        Math.sin(time * 2)
-      ) *
-      0.5;
-
+      0.65 +
+      Math.min(
+        0.55,
+        (time % 2) / 2
+      );
   }
 
-  if (
-    state.textAnimation === "fade"
-  ) {
+
+  let alpha =
+    state.textOpacity;
+
+  if (state.textAnimation === "fade") {
 
     alpha =
-      0.3 +
-      Math.abs(
-        Math.sin(time * 2)
-      ) *
-      0.7;
-
+      0.35 +
+      0.65 *
+      ((Math.sin(time * 2) + 1) / 2);
   }
 
-  if (
-    state.textAnimation === "bounce"
-  ) {
-
-    pos.y +=
-      Math.abs(
-        Math.sin(time * 4)
-      ) *
-      -50;
-
-  }
 
   ctx.save();
 
-  ctx.globalAlpha =
-    alpha;
+  ctx.translate(pos.x, pos.y);
 
-  ctx.translate(
-    pos.x,
-    pos.y
+  ctx.rotate(
+    state.textRotation *
+    Math.PI / 180
   );
 
-  ctx.scale(
-    scale,
-    scale
-  );
+  ctx.scale(scale, scale);
 
-  ctx.textAlign =
-    state.textAlign;
+  const font =
+    `${state.textStyle} ${state.textWeight} ${state.textSize}px "${state.textFont}"`;
 
-  ctx.textBaseline =
-    "middle";
+  ctx.font = font;
 
-  ctx.font =
-    `${fontStyle} ${fontWeight} ${size}px ${state.fontFamily}`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+
+  ctx.globalAlpha = alpha;
+
+  const effect =
+    state.textEffect;
+
+
+  /* shadow */
 
   if (
-    state.textShadow
+    effect === "shadow" ||
+    effect === "glow" ||
+    effect === "neon"
   ) {
 
-    ctx.shadowColor =
-      "rgba(0,0,0,0.8)";
-
     ctx.shadowBlur =
-      8;
+      effect === "neon" ? 22 : 12;
 
-    ctx.shadowOffsetX =
-      3;
-
-    ctx.shadowOffsetY =
-      3;
-
+    ctx.shadowColor =
+      effect === "neon"
+        ? "#00eaff"
+        : "rgba(0,0,0,.85)";
   }
 
-  const lines =
-    state.text.split("\n");
 
-  const lineHeight =
-    size * 1.25;
+  /* gradient */
 
-  lines.forEach(
-    (line, index) => {
+  let fillStyle =
+    state.textColor;
 
-      const lineY =
-        (index -
-        (lines.length - 1) / 2) *
-        lineHeight;
+  if (
+    effect === "gradient" ||
+    effect === "rainbow" ||
+    effect === "gold"
+  ) {
 
-      if (
-        !state.transparentBg
-      ) {
-
-        const metrics =
-          ctx.measureText(line);
-
-        const padding =
-          15;
-
-        ctx.save();
-
-        ctx.shadowColor =
-          "transparent";
-
-        ctx.fillStyle =
-          state.textBg;
-
-        ctx.fillRect(
-
-          -(
-            metrics.width / 2
-          ) -
-          padding,
-
-          lineY -
-          size / 2 -
-          padding / 2,
-
-          metrics.width +
-          padding * 2,
-
-          size +
-          padding
-
-        );
-
-        ctx.restore();
-
-      }
-
-      ctx.fillStyle =
-        state.textColor;
-
-      ctx.fillText(
-        line,
+    const g =
+      ctx.createLinearGradient(
+        -250,
         0,
-        lineY
+        250,
+        0
       );
 
+    if (effect === "gold") {
+
+      g.addColorStop(0, "#8f6b24");
+      g.addColorStop(.25, "#fff1a8");
+      g.addColorStop(.5, "#d8ad47");
+      g.addColorStop(.75, "#fff4ae");
+      g.addColorStop(1, "#8f6b24");
+
+    } else if (effect === "rainbow") {
+
+      g.addColorStop(0, "#ff315b");
+      g.addColorStop(.25, "#ffcc33");
+      g.addColorStop(.5, "#27e67a");
+      g.addColorStop(.75, "#20bfff");
+      g.addColorStop(1, "#9a5cff");
+
+    } else {
+
+      g.addColorStop(0, "#ffffff");
+      g.addColorStop(.5, "#7c5cff");
+      g.addColorStop(1, "#00eaff");
     }
+
+    fillStyle = g;
+  }
+
+
+  /* outline */
+
+  if (
+    effect === "outline" ||
+    effect === "neon" ||
+    effect === "gold"
+  ) {
+
+    ctx.lineJoin = "round";
+
+    ctx.lineWidth =
+      state.textOutlineWidth;
+
+    ctx.strokeStyle =
+      effect === "neon"
+        ? "#00eaff"
+        : state.textOutlineColor;
+
+    ctx.strokeText(
+      text,
+      0,
+      0
+    );
+  }
+
+
+  ctx.fillStyle = fillStyle;
+
+  /*
+    Letter spacing का browser canvas native support नहीं है,
+    इसलिए normal drawText किया जाता है।
+  */
+
+  ctx.fillText(
+    text,
+    0,
+    0
   );
 
   ctx.restore();
-
 }
 
 
 /* =========================================================
-   OVERLAY MEDIA
+   COLOR FILTER
 ========================================================= */
 
-$("overlayInput").addEventListener(
-  "change",
-  e => {
+function buildFilter() {
 
-    const file =
-      e.target.files[0];
-
-    if (!file) {
-      return;
-    }
-
-    overlayFile =
-      file;
-
-    if (overlayURL) {
-
-      URL.revokeObjectURL(
-        overlayURL
-      );
-
-    }
-
-    overlayURL =
-      URL.createObjectURL(file);
-
-    if (
-      file.type.startsWith("video/")
-    ) {
-
-      overlayMedia =
-        document.createElement("video");
-
-      overlayMedia.src =
-        overlayURL;
-
-      overlayMedia.muted =
-        true;
-
-      overlayMedia.loop =
-        true;
-
-      overlayMedia.playsInline =
-        true;
-
-      overlayMedia.play()
-        .catch(() => {});
-
-    } else {
-
-      overlayMedia =
-        new Image();
-
-      overlayMedia.src =
-        overlayURL;
-
-    }
-
-  }
-);
+  return `
+    brightness(${state.brightness}%)
+    contrast(${state.contrast}%)
+    saturate(${state.saturation}%)
+    hue-rotate(${state.hue}deg)
+    blur(${state.blur}px)
+    sepia(${state.sepia}%)
+  `;
+}
 
 
 /* =========================================================
-   DRAW OVERLAY
+   MEDIA DRAW
 ========================================================= */
 
-function drawOverlay(time) {
+function drawCover(video, x, y, w, h) {
 
   if (
-    !overlayMedia
-  ) {
+    !video ||
+    video.readyState < 2 ||
+    !video.videoWidth
+  ) return;
 
-    return;
-
-  }
-
-  if (
-    overlayMedia.readyState !== undefined &&
-    overlayMedia.readyState < 2
-  ) {
-
-    return;
-
-  }
-
-  const cw =
-    canvas.width;
-
-  const ch =
-    canvas.height;
+  const vw = video.videoWidth;
+  const vh = video.videoHeight;
 
   const scale =
-    Number(state.overlayScale);
+    Math.max(w / vw, h / vh);
 
-  const base =
-    Math.min(cw, ch);
+  const dw = vw * scale;
+  const dh = vh * scale;
 
-  const w =
-    base * scale;
+  const dx =
+    x + (w - dw) / 2;
 
-  const ratio =
-    overlayMedia.videoWidth
-      ? overlayMedia.videoHeight /
-        overlayMedia.videoWidth
-      : 0.75;
+  const dy =
+    y + (h - dh) / 2;
 
-  const h =
-    w * ratio;
-
-  const x =
-    cw *
-    Number(state.overlayX) /
-    100;
-
-  const y =
-    ch *
-    Number(state.overlayY) /
-    100;
-
-  ctx.save();
-
-  drawFrameMedia(
-    overlayMedia,
-    x,
-    y,
-    w,
-    h,
-    selectedFrame
+  ctx.drawImage(
+    video,
+    dx,
+    dy,
+    dw,
+    dh
   );
+}
 
-  ctx.restore();
 
+function drawContain(media, x, y, w, h) {
+
+  if (
+    !media ||
+    media.readyState < 2
+  ) return;
+
+  const vw =
+    media.videoWidth ||
+    media.naturalWidth;
+
+  const vh =
+    media.videoHeight ||
+    media.naturalHeight;
+
+  if (!vw || !vh)
+    return;
+
+  const scale =
+    Math.min(w / vw, h / vh);
+
+  const dw =
+    vw * scale;
+
+  const dh =
+    vh * scale;
+
+  const dx =
+    x + (w - dw) / 2;
+
+  const dy =
+    y + (h - dh) / 2;
+
+  ctx.drawImage(
+    media,
+    dx,
+    dy,
+    dw,
+    dh
+  );
 }
 
 
@@ -968,60 +1584,110 @@ function drawOverlay(time) {
    FRAME DRAWING
 ========================================================= */
 
-function drawFrameMedia(
-  media,
+function roundedRect(
+  ctx,
   x,
   y,
   w,
   h,
-  frame
+  r
 ) {
 
-  if (
-    frame === "circle"
-  ) {
-
-    ctx.save();
-
-    ctx.beginPath();
-
-    ctx.arc(
-      x,
-      y,
-      Math.min(w, h) / 2,
-      0,
-      Math.PI * 2
+  r =
+    Math.min(
+      r,
+      Math.abs(w) / 2,
+      Math.abs(h) / 2
     );
 
-    ctx.clip();
+  ctx.beginPath();
 
-    ctx.drawImage(
-      media,
-      x - w / 2,
-      y - h / 2,
-      w,
-      h
-    );
+  ctx.moveTo(x + r, y);
 
-    ctx.restore();
+  ctx.arcTo(
+    x + w,
+    y,
+    x + w,
+    y + h,
+    r
+  );
 
-    ctx.save();
+  ctx.arcTo(
+    x + w,
+    y + h,
+    x,
+    y + h,
+    r
+  );
 
-    ctx.strokeStyle =
-      "#ffffff";
+  ctx.arcTo(
+    x,
+    y + h,
+    x,
+    y,
+    r
+  );
 
+  ctx.arcTo(
+    x,
+    y,
+    x + w,
+    y,
+    r
+  );
+
+  ctx.closePath();
+}
+
+
+function drawFrameBorder(x, y, w, h) {
+
+  const f =
+    state.frame;
+
+  if (f === "none")
+    return;
+
+  ctx.save();
+
+  let radius = 18;
+
+  if (f === "circle")
+    radius = Math.min(w, h) / 2;
+
+  if (f === "heart") {
+
+    ctx.strokeStyle = "#ff3d73";
     ctx.lineWidth =
-      Math.max(5, w * 0.02);
+      state.frameWidth;
+
+    ctx.shadowColor = "#ff3d73";
+    ctx.shadowBlur = 18;
 
     ctx.beginPath();
 
     ctx.arc(
-      x,
-      y,
-      Math.min(w, h) / 2,
-      0,
-      Math.PI * 2
+      x + w * .32,
+      y + h * .3,
+      w * .22,
+      Math.PI * .8,
+      Math.PI * 2.1
     );
+
+    ctx.arc(
+      x + w * .68,
+      y + h * .3,
+      w * .22,
+      Math.PI * 1,
+      Math.PI * 2.3
+    );
+
+    ctx.lineTo(
+      x + w / 2,
+      y + h
+    );
+
+    ctx.closePath();
 
     ctx.stroke();
 
@@ -1031,374 +1697,396 @@ function drawFrameMedia(
   }
 
 
-  if (
-    frame === "heart"
-  ) {
+  if (f === "rainbow") {
 
-    ctx.save();
+    const g =
+      ctx.createLinearGradient(
+        x,
+        y,
+        x + w,
+        y + h
+      );
+
+    g.addColorStop(0,"#ff1744");
+    g.addColorStop(.2,"#ff9800");
+    g.addColorStop(.4,"#ffee00");
+    g.addColorStop(.6,"#00e676");
+    g.addColorStop(.8,"#00b0ff");
+    g.addColorStop(1,"#9c27ff");
+
+    ctx.strokeStyle = g;
+
+    ctx.lineWidth =
+      state.frameWidth;
+
+    ctx.shadowColor =
+      "#00eaff";
+
+    ctx.shadowBlur = 12;
+
+  } else if (f === "neon") {
+
+    ctx.strokeStyle =
+      "#00eaff";
+
+    ctx.lineWidth =
+      state.frameWidth;
+
+    ctx.shadowColor =
+      "#7c5cff";
+
+    ctx.shadowBlur = 24;
+
+  } else if (f === "gold") {
+
+    const g =
+      ctx.createLinearGradient(
+        x,
+        y,
+        x + w,
+        y + h
+      );
+
+    g.addColorStop(0,"#7d5b20");
+    g.addColorStop(.25,"#fff0a0");
+    g.addColorStop(.5,"#c9962d");
+    g.addColorStop(.75,"#fff3a3");
+    g.addColorStop(1,"#6f4d17");
+
+    ctx.strokeStyle = g;
+
+    ctx.lineWidth =
+      state.frameWidth;
+
+    ctx.shadowColor =
+      "#d6a84f";
+
+    ctx.shadowBlur = 15;
+
+  } else if (f === "glass") {
+
+    ctx.strokeStyle =
+      "rgba(255,255,255,.8)";
+
+    ctx.lineWidth =
+      state.frameWidth;
+
+    ctx.shadowColor =
+      "#8deaff";
+
+    ctx.shadowBlur = 20;
+
+  } else if (f === "cyber") {
+
+    ctx.strokeStyle =
+      "#8b5cff";
+
+    ctx.lineWidth =
+      state.frameWidth;
+
+    ctx.shadowColor =
+      "#00eaff";
+
+    ctx.shadowBlur = 20;
+
+  } else if (f === "fire") {
+
+    ctx.strokeStyle =
+      "#ff531a";
+
+    ctx.lineWidth =
+      state.frameWidth;
+
+    ctx.shadowColor =
+      "#ff9d00";
+
+    ctx.shadowBlur = 25;
+
+  } else if (f === "ice") {
+
+    ctx.strokeStyle =
+      "#8eeaff";
+
+    ctx.lineWidth =
+      state.frameWidth;
+
+    ctx.shadowColor =
+      "#00cfff";
+
+    ctx.shadowBlur = 20;
+
+  } else if (f === "film") {
+
+    ctx.strokeStyle =
+      "#f4f4f4";
+
+    ctx.lineWidth =
+      state.frameWidth;
+
+  } else if (f === "phone") {
+
+    ctx.strokeStyle =
+      "#151515";
+
+    ctx.lineWidth =
+      state.frameWidth + 5;
+
+    radius = 28;
+
+  } else if (f === "tv") {
+
+    ctx.strokeStyle =
+      "#5d6470";
+
+    ctx.lineWidth =
+      state.frameWidth + 6;
+
+    radius = 8;
+
+  } else if (f === "circle") {
+
+    ctx.strokeStyle =
+      "#ffffff";
+
+    ctx.lineWidth =
+      state.frameWidth;
+
+    radius =
+      Math.min(w,h) / 2;
+
+  } else if (f === "premium") {
+
+    const g =
+      ctx.createLinearGradient(
+        x,
+        y,
+        x + w,
+        y + h
+      );
+
+    g.addColorStop(0,"#805f1d");
+    g.addColorStop(.2,"#fff0a5");
+    g.addColorStop(.45,"#c99a35");
+    g.addColorStop(.7,"#fff2aa");
+    g.addColorStop(1,"#765215");
+
+    ctx.strokeStyle = g;
+
+    ctx.lineWidth =
+      state.frameWidth;
+
+    ctx.shadowColor =
+      "rgba(255,215,80,.8)";
+
+    ctx.shadowBlur = 18;
+
+  }
+
+
+  if (f === "circle") {
 
     ctx.beginPath();
 
-    const top =
-      y - h * 0.25;
+    ctx.arc(
+      x + w / 2,
+      y + h / 2,
+      Math.min(w,h) / 2,
+      0,
+      Math.PI * 2
+    );
 
-    ctx.moveTo(
+    ctx.stroke();
+
+  } else {
+
+    roundedRect(
+      ctx,
       x,
-      y + h * 0.42
-    );
-
-    ctx.bezierCurveTo(
-      x - w * 0.65,
-      y - h * 0.05,
-      x - w * 0.55,
-      top - h * 0.45,
-      x,
-      top
-    );
-
-    ctx.bezierCurveTo(
-      x + w * 0.55,
-      top - h * 0.45,
-      x + w * 0.65,
-      y - h * 0.05,
-      x,
-      y + h * 0.42
-    );
-
-    ctx.clip();
-
-    ctx.drawImage(
-      media,
-      x - w / 2,
-      y - h / 2,
+      y,
       w,
-      h
+      h,
+      radius
     );
 
-    ctx.restore();
-
-    return;
+    ctx.stroke();
   }
 
-
-  if (
-    frame === "polaroid"
-  ) {
-
-    ctx.save();
-
-    ctx.fillStyle =
-      "#ffffff";
-
-    ctx.fillRect(
-      x - w / 2 - 15,
-      y - h / 2 - 15,
-      w + 30,
-      h + 55
-    );
-
-    ctx.drawImage(
-      media,
-      x - w / 2,
-      y - h / 2,
-      w,
-      h
-    );
-
-    ctx.restore();
-
-    return;
-  }
-
-
-  ctx.drawImage(
-    media,
-    x - w / 2,
-    y - h / 2,
-    w,
-    h
-  );
-
-
-  if (
-    frame === "mobile"
-  ) {
-
-    ctx.save();
-
-    ctx.strokeStyle =
-      "#111111";
-
-    ctx.lineWidth =
-      Math.max(10, w * 0.035);
-
-    ctx.strokeRect(
-      x - w / 2,
-      y - h / 2,
-      w,
-      h
-    );
-
-    ctx.fillStyle =
-      "#111111";
-
-    ctx.fillRect(
-      x - w * 0.07,
-      y - h / 2,
-      w * 0.14,
-      8
-    );
-
-    ctx.restore();
-
-  }
-
-
-  if (
-    frame === "rounded"
-  ) {
-
-    ctx.save();
-
-    ctx.strokeStyle =
-      "#ffffff";
-
-    ctx.lineWidth =
-      8;
-
-    ctx.strokeRect(
-      x - w / 2,
-      y - h / 2,
-      w,
-      h
-    );
-
-    ctx.restore();
-
-  }
-
-
-  if (
-    frame === "film"
-  ) {
-
-    ctx.save();
-
-    ctx.strokeStyle =
-      "#ffffff";
-
-    ctx.lineWidth =
-      10;
-
-    ctx.strokeRect(
-      x - w / 2,
-      y - h / 2,
-      w,
-      h
-    );
-
-    ctx.fillStyle =
-      "#ffffff";
-
-    for (
-      let i = 0;
-      i < 5;
-      i++
-    ) {
-
-      ctx.fillRect(
-        x - w / 2 - 4,
-        y - h / 2 + i * h / 4,
-        12,
-        20
-      );
-
-      ctx.fillRect(
-        x + w / 2 - 8,
-        y - h / 2 + i * h / 4,
-        12,
-        20
-      );
-
-    }
-
-    ctx.restore();
-
-  }
-
-
-  if (
-    frame === "premium"
-  ) {
-
-    ctx.save();
-
-    ctx.strokeStyle =
-      "#f5d76e";
-
-    ctx.lineWidth =
-      12;
-
-    ctx.strokeRect(
-      x - w / 2,
-      y - h / 2,
-      w,
-      h
-    );
-
-    ctx.strokeStyle =
-      "#ffffff";
-
-    ctx.lineWidth =
-      3;
-
-    ctx.strokeRect(
-      x - w / 2 + 15,
-      y - h / 2 + 15,
-      w - 30,
-      h - 30
-    );
-
-    ctx.restore();
-
-  }
-
-
-  if (
-    frame === "tv"
-  ) {
-
-    ctx.save();
-
-    ctx.strokeStyle =
-      "#202020";
-
-    ctx.lineWidth =
-      18;
-
-    ctx.strokeRect(
-      x - w / 2,
-      y - h / 2,
-      w,
-      h
-    );
-
-    ctx.restore();
-
-  }
-
+  ctx.restore();
 }
 
 
 /* =========================================================
-   TEMPLATES
+   OVERLAY
 ========================================================= */
 
-function drawTemplate() {
+function drawOverlay(time) {
+
+  if (
+    state.overlayType === "none"
+  ) return;
+
+  let media = null;
+
+  if (state.overlayType === "video")
+    media = overlayVideo;
+
+  if (state.overlayType === "image")
+    media = overlayImage;
+
+  if (state.overlayType === "camera")
+    media = frameCameraVideo;
+
+  if (!media)
+    return;
 
   const w =
-    canvas.width;
+    canvas.width *
+    state.overlayScale;
 
   const h =
-    canvas.height;
+    w * 9 / 16;
 
-  if (
-    selectedTemplate === "cinema"
-  ) {
+  const cx =
+    canvas.width *
+    (0.5 + state.frameX);
 
-    ctx.fillStyle =
-      "rgba(0,0,0,0.35)";
+  const cy =
+    canvas.height *
+    (0.5 + state.frameY);
 
-    ctx.fillRect(
+  const x =
+    cx - w / 2;
+
+  const y =
+    cy - h / 2;
+
+  ctx.save();
+
+  ctx.translate(
+    cx,
+    cy
+  );
+
+  ctx.rotate(
+    state.frameRotation *
+    Math.PI / 180
+  );
+
+  ctx.translate(
+    -cx,
+    -cy
+  );
+
+
+  /* clip shape */
+
+  if (state.frame === "circle") {
+
+    ctx.beginPath();
+
+    ctx.arc(
+      cx,
+      cy,
+      Math.min(w,h) / 2,
       0,
-      0,
-      w,
-      h * 0.10
+      Math.PI * 2
     );
 
-    ctx.fillRect(
-      0,
-      h * 0.90,
-      w,
-      h * 0.10
-    );
+    ctx.clip();
 
-  }
-
-
-  if (
-    selectedTemplate === "story"
-  ) {
-
-    ctx.strokeStyle =
-      "rgba(255,255,255,0.8)";
-
-    ctx.lineWidth =
-      10;
-
-    ctx.strokeRect(
-      20,
-      20,
-      w - 40,
-      h - 40
-    );
-
-  }
-
-
-  if (
-    selectedTemplate === "vintage"
-  ) {
-
-    ctx.fillStyle =
-      "rgba(170,120,60,0.12)";
-
-    ctx.fillRect(
-      0,
-      0,
+    drawContain(
+      media,
+      x,
+      y,
       w,
       h
     );
 
-  }
+  } else {
 
+    const radius =
+      state.frame === "phone"
+        ? 28
+        : 18;
 
-  if (
-    selectedTemplate === "minimal"
-  ) {
-
-    ctx.strokeStyle =
-      "rgba(255,255,255,0.7)";
-
-    ctx.lineWidth =
-      3;
-
-    ctx.strokeRect(
-      25,
-      25,
-      w - 50,
-      h - 50
+    roundedRect(
+      ctx,
+      x,
+      y,
+      w,
+      h,
+      radius
     );
 
+    ctx.clip();
+
+    drawContain(
+      media,
+      x,
+      y,
+      w,
+      h
+    );
   }
 
+  ctx.restore();
 
-  if (
-    selectedTemplate === "social"
+  drawFrameBorder(
+    x,
+    y,
+    w,
+    h
+  );
+}
+
+
+/* =========================================================
+   BACKGROUND
+========================================================= */
+
+function drawBackground() {
+
+  ctx.save();
+
+  ctx.filter =
+    buildFilter();
+
+  if (state.bgSourceType === "video") {
+
+    drawCover(
+      bgVideo,
+      0,
+      0,
+      canvas.width,
+      canvas.height
+    );
+
+  } else if (
+    state.bgSourceType === "camera"
   ) {
 
+    drawCover(
+      bgCameraVideo,
+      0,
+      0,
+      canvas.width,
+      canvas.height
+    );
+
+  } else {
+
     ctx.fillStyle =
-      "rgba(0,0,0,0.18)";
+      "#05070c";
 
     ctx.fillRect(
       0,
-      h * 0.82,
-      w,
-      h * 0.18
+      0,
+      canvas.width,
+      canvas.height
     );
-
   }
 
+  ctx.restore();
 }
 
 
@@ -1406,1474 +2094,429 @@ function drawTemplate() {
    MAIN RENDER
 ========================================================= */
 
-function renderPreview() {
+function render() {
 
-  if (!video.videoWidth) {
-    return;
+  const time =
+    bgVideo.currentTime || 0;
+
+  ctx.clearRect(
+    0,
+    0,
+    canvas.width,
+    canvas.height
+  );
+
+  drawBackground();
+
+  drawOverlay(time);
+
+  drawText(time);
+
+  $("currentTime").textContent =
+    formatTime(time);
+
+  if (
+    bgVideo.duration &&
+    isFinite(bgVideo.duration)
+  ) {
+
+    $("timeline").value =
+      (time / bgVideo.duration) * 100;
   }
-
-  drawVideo();
-
-  drawTemplate();
-
-  drawOverlay(
-    video.currentTime
-  );
-
-  drawText(
-    video.currentTime
-  );
-
-  updateTextDOM();
 
   animationFrame =
-    requestAnimationFrame(
-      renderPreview
-    );
+    requestAnimationFrame(render);
+}
 
+
+function startRender() {
+
+  if (!animationFrame)
+    render();
 }
 
 
 /* =========================================================
-   TEXT DOM PREVIEW
+   VIDEO EVENTS
 ========================================================= */
 
-function updateTextDOM() {
+bgVideo.addEventListener("play", () => {
+  startRender();
+});
 
-  if (
-    !state.text.trim()
-  ) {
+bgVideo.addEventListener("pause", () => {
+  startRender();
+});
 
-    textPreview.textContent =
-      "";
+bgVideo.addEventListener("ended", () => {
 
-    return;
-
-  }
-
-  textPreview.textContent =
-    state.text;
-
-  textPreview.style.color =
-    state.textColor;
-
-  textPreview.style.fontFamily =
-    state.fontFamily;
-
-  textPreview.style.fontSize =
-    `${Math.max(12, state.fontSize * 0.45)}px`;
-
-  textPreview.style.fontWeight =
-    state.fontStyle.includes("bold")
-      ? "700"
-      : "400";
-
-  textPreview.style.fontStyle =
-    state.fontStyle.includes("italic")
-      ? "italic"
-      : "normal";
-
-  textPreview.style.textAlign =
-    state.textAlign;
-
-  textPreview.style.background =
-    state.transparentBg
-      ? "transparent"
-      : state.textBg;
-
-  textPreview.style.boxShadow =
-    state.textShadow
-      ? "3px 3px 8px rgba(0,0,0,0.8)"
-      : "none";
-
-  textPreview.style.left =
-    "50%";
-
-  if (
-    state.textPosition === "top"
-  ) {
-
-    textPreview.style.top =
-      "15%";
-
-  }
-
-  if (
-    state.textPosition === "middle"
-  ) {
-
-    textPreview.style.top =
-      "50%";
-
-  }
-
-  if (
-    state.textPosition === "bottom"
-  ) {
-
-    textPreview.style.top =
-      "85%";
-
-  }
-
-  textPreview.style.transform =
-    "translate(-50%, -50%)";
-
-}
+  $("playBtn").textContent = "▶";
+});
 
 
 /* =========================================================
-   TAB SYSTEM
-========================================================= */
-
-document
-  .querySelectorAll(".tab")
-  .forEach(
-    button => {
-
-      button.addEventListener(
-        "click",
-        () => {
-
-          document
-            .querySelectorAll(".tab")
-            .forEach(
-              b =>
-                b.classList.remove(
-                  "active"
-                )
-            );
-
-          document
-            .querySelectorAll(".panel")
-            .forEach(
-              p =>
-                p.classList.remove(
-                  "active"
-                )
-            );
-
-          button.classList.add(
-            "active"
-          );
-
-          const panel =
-            $(button.dataset.tab);
-
-          if (panel) {
-
-            panel.classList.add(
-              "active"
-            );
-
-          }
-
-        }
-      );
-
-    }
-  );
-
-
-/* =========================================================
-   GENERIC SETTINGS
-========================================================= */
-
-function bindRange(
-  id,
-  key
-) {
-
-  const element =
-    $(id);
-
-  if (!element) {
-    return;
-  }
-
-  element.addEventListener(
-    "input",
-    () => {
-
-      state[key] =
-        element.value;
-
-      renderPreview();
-
-    }
-  );
-
-}
-
-
-bindRange(
-  "brightness",
-  "brightness"
-);
-
-bindRange(
-  "contrast",
-  "contrast"
-);
-
-bindRange(
-  "saturation",
-  "saturation"
-);
-
-bindRange(
-  "volume",
-  "volume"
-);
-
-bindRange(
-  "animationSpeed",
-  "animationSpeed"
-);
-
-bindRange(
-  "overlayScale",
-  "overlayScale"
-);
-
-bindRange(
-  "overlayX",
-  "overlayX"
-);
-
-bindRange(
-  "overlayY",
-  "overlayY"
-);
-
-
-/* =========================================================
-   SELECT SETTINGS
-========================================================= */
-
-function bindSelect(
-  id,
-  key
-) {
-
-  $(id).addEventListener(
-    "change",
-    () => {
-
-      state[key] =
-        $(id).value;
-
-      renderPreview();
-
-    }
-  );
-
-}
-
-
-bindSelect(
-  "rotate",
-  "rotate"
-);
-
-bindSelect(
-  "flip",
-  "flip"
-);
-
-bindSelect(
-  "resolution",
-  "resolution"
-);
-
-bindSelect(
-  "filter",
-  "filter"
-);
-
-bindSelect(
-  "speed",
-  "speed"
-);
-
-bindSelect(
-  "fontFamily",
-  "fontFamily"
-);
-
-bindSelect(
-  "fontStyle",
-  "fontStyle"
-);
-
-bindSelect(
-  "textAlign",
-  "textAlign"
-);
-
-bindSelect(
-  "textPosition",
-  "textPosition"
-);
-
-bindSelect(
-  "textAnimation",
-  "textAnimation"
-);
-
-
-/* =========================================================
-   TEXT INPUTS
-========================================================= */
-
-$("textInput").addEventListener(
-  "input",
-  () => {
-
-    state.text =
-      $("textInput").value;
-
-    renderPreview();
-
-  }
-);
-
-
-$("textColor").addEventListener(
-  "input",
-  () => {
-
-    state.textColor =
-      $("textColor").value;
-
-    renderPreview();
-
-  }
-);
-
-
-$("textBg").addEventListener(
-  "input",
-  () => {
-
-    state.textBg =
-      $("textBg").value;
-
-    renderPreview();
-
-  }
-);
-
-
-$("transparentBg").addEventListener(
-  "change",
-  () => {
-
-    state.transparentBg =
-      $("transparentBg").checked;
-
-    renderPreview();
-
-  }
-);
-
-
-$("fontSize").addEventListener(
-  "input",
-  () => {
-
-    state.fontSize =
-      $("fontSize").value;
-
-    renderPreview();
-
-  }
-);
-
-
-$("textShadow").addEventListener(
-  "change",
-  () => {
-
-    state.textShadow =
-      $("textShadow").checked;
-
-    renderPreview();
-
-  }
-);
-
-
-/* =========================================================
-   AUDIO SETTINGS
-========================================================= */
-
-$("volume").addEventListener(
-  "input",
-  () => {
-
-    state.volume =
-      Number(
-        $("volume").value
-      );
-
-    video.volume =
-      Math.min(
-        1,
-        state.volume / 100
-      );
-
-  }
-);
-
-
-$("mute").addEventListener(
-  "change",
-  () => {
-
-    state.mute =
-      $("mute").checked;
-
-    video.muted =
-      state.mute;
-
-  }
-);
-
-
-$("speed").addEventListener(
-  "change",
-  () => {
-
-    state.speed =
-      Number(
-        $("speed").value
-      );
-
-    video.playbackRate =
-      state.speed;
-
-  }
-);
-
-
-/* =========================================================
-   MUSIC
-========================================================= */
-
-$("musicInput").addEventListener(
-  "change",
-  e => {
-
-    musicFile =
-      e.target.files[0];
-
-    if (musicFile) {
-
-      $("musicName").textContent =
-        musicFile.name;
-
-    }
-
-  }
-);
-
-
-$("removeMusic").addEventListener(
-  "click",
-  () => {
-
-    musicFile =
-      null;
-
-    $("musicInput").value =
-      "";
-
-    $("musicName").textContent =
-      "कोई music नहीं चुना गया";
-
-  }
-);
-
-
-/* =========================================================
-   FRAME BUTTONS
-========================================================= */
-
-document
-  .querySelectorAll(".frame-btn")
-  .forEach(
-    button => {
-
-      button.addEventListener(
-        "click",
-        () => {
-
-          document
-            .querySelectorAll(".frame-btn")
-            .forEach(
-              b =>
-                b.classList.remove(
-                  "active"
-                )
-            );
-
-          button.classList.add(
-            "active"
-          );
-
-          selectedFrame =
-            button.dataset.frame;
-
-          renderPreview();
-
-        }
-      );
-
-    }
-  );
-
-
-$("removeOverlay").addEventListener(
-  "click",
-  () => {
-
-    overlayFile =
-      null;
-
-    overlayMedia =
-      null;
-
-    if (overlayURL) {
-
-      URL.revokeObjectURL(
-        overlayURL
-      );
-
-      overlayURL =
-        null;
-
-    }
-
-    $("overlayInput").value =
-      "";
-
-    renderPreview();
-
-  }
-);
-
-
-/* =========================================================
-   TEMPLATE BUTTONS
-========================================================= */
-
-document
-  .querySelectorAll(".template-btn")
-  .forEach(
-    button => {
-
-      button.addEventListener(
-        "click",
-        () => {
-
-          document
-            .querySelectorAll(".template-btn")
-            .forEach(
-              b =>
-                b.classList.remove(
-                  "active"
-                )
-            );
-
-          button.classList.add(
-            "active"
-          );
-
-          selectedTemplate =
-            button.dataset.template;
-
-          renderPreview();
-
-        }
-      );
-
-    }
-  );
-
-
-/* =========================================================
-   TIMELINE
-========================================================= */
-
-video.addEventListener(
-  "timeupdate",
-  () => {
-
-    const duration =
-      video.duration || 0;
-
-    if (duration) {
-
-      $("timelineRange").value =
-        (
-          video.currentTime /
-          duration
-        ) *
-        100;
-
-    }
-
-    $("currentTime").textContent =
-      formatTime(
-        video.currentTime
-      );
-
-  }
-);
-
-
-$("timelineRange").addEventListener(
-  "input",
-  () => {
-
-    if (!video.duration) {
-      return;
-    }
-
-    video.currentTime =
-      video.duration *
-      (
-        Number(
-          $("timelineRange").value
-        ) / 100
-      );
-
-  }
-);
-
-
-$("playBtn").addEventListener(
-  "click",
-  () => {
-
-    video.play();
-
-  }
-);
-
-
-$("pauseBtn").addEventListener(
-  "click",
-  () => {
-
-    video.pause();
-
-  }
-);
-
-
-$("resetBtn").addEventListener(
-  "click",
-  () => {
-
-    video.currentTime =
-      Number(
-        $("startTime").value || 0
-      );
-
-  }
-);
-
-
-/* =========================================================
-   FORMAT TIME
-========================================================= */
-
-function formatTime(seconds) {
-
-  if (
-    !Number.isFinite(seconds)
-  ) {
-
-    return "00:00";
-
-  }
-
-  const mins =
-    Math.floor(
-      seconds / 60
-    );
-
-  const secs =
-    Math.floor(
-      seconds % 60
-    );
-
-  return (
-    String(mins).padStart(2, "0") +
-    ":" +
-    String(secs).padStart(2, "0")
-  );
-
-}
-
-
-/* =========================================================
-   START / END
-========================================================= */
-
-$("startTime").addEventListener(
-  "change",
-  () => {
-
-    const start =
-      Number(
-        $("startTime").value
-      );
-
-    if (
-      Number.isFinite(start)
-    ) {
-
-      video.currentTime =
-        start;
-
-    }
-
-  }
-);
-
-
-$("endTime").addEventListener(
-  "change",
-  () => {
-
-    const end =
-      Number(
-        $("endTime").value
-      );
-
-    if (
-      Number.isFinite(end) &&
-      video.currentTime > end
-    ) {
-
-      video.currentTime =
-        end;
-
-    }
-
-  }
-);
-
-
-/* =========================================================
-   AUDIO STREAM
-========================================================= */
-
-function setupAudio() {
-
-  if (
-    audioContext
-  ) {
-
-    return;
-
-  }
-
-  audioContext =
-    new (
-      window.AudioContext ||
-      window.webkitAudioContext
-    )();
-
-  mediaDestination =
-    audioContext.createMediaStreamDestination();
-
-  try {
-
-    sourceNode =
-      audioContext.createMediaElementSource(
-        video
-      );
-
-    sourceNode
-      .connect(
-        audioContext.destination
-      );
-
-    sourceNode
-      .connect(
-        mediaDestination
-      );
-
-  } catch (error) {
-
-    console.warn(
-      "Audio source setup:",
-      error
-    );
-
-  }
-
-}
-
-
-/* =========================================================
-   MUSIC STREAM
-========================================================= */
-
-async function setupMusic() {
-
-  if (!musicFile) {
-    return;
-  }
-
-  if (!audioContext) {
-    setupAudio();
-  }
-
-  const music =
-    new Audio();
-
-  music.src =
-    URL.createObjectURL(
-      musicFile
-    );
-
-  music.loop =
-    true;
-
-  music.volume =
-    0.45;
-
-  try {
-
-    await music.play();
-
-  } catch (error) {
-
-    console.warn(
-      "Music playback requires user interaction.",
-      error
-    );
-
-  }
-
-  try {
-
-    musicSourceNode =
-      audioContext.createMediaElementSource(
-        music
-      );
-
-    musicSourceNode
-      .connect(
-        mediaDestination
-      );
-
-  } catch (error) {
-
-    console.warn(
-      "Music audio setup:",
-      error
-    );
-
-  }
-
-  return music;
-
-}
-
-
-/* =========================================================
-   EXPORT CANVAS STREAM
-========================================================= */
-
-async function createExportStream() {
-
-  if (!videoFile) {
-
-    throw new Error(
-      "पहले video upload करें।"
-    );
-
-  }
-
-  resizeCanvasForResolution();
-
-  setupAudio();
-
-  if (
-    audioContext &&
-    audioContext.state === "suspended"
-  ) {
-
-    await audioContext.resume();
-
-  }
-
-  const canvasStream =
-    canvas.captureStream(30);
-
-  const tracks = [
-    ...canvasStream.getVideoTracks()
-  ];
-
-  if (
-    mediaDestination
-  ) {
-
-    tracks.push(
-      ...mediaDestination
-        .stream
-        .getAudioTracks()
-    );
-
-  }
-
-  return new MediaStream(
-    tracks
-  );
-
-}
-
-
-/* =========================================================
-   WEBM EXPORT
-========================================================= */
-
-async function exportWebM() {
-
-  const stream =
-    await createExportStream();
-
-  const mimeTypes = [
-
-    "video/webm;codecs=vp9,opus",
-
-    "video/webm;codecs=vp8,opus",
-
-    "video/webm"
-
-  ];
-
-  let mimeType =
-    "";
-
-  for (
-    const type of mimeTypes
-  ) {
-
-    if (
-      MediaRecorder.isTypeSupported(
-        type
-      )
-    ) {
-
-      mimeType =
-        type;
-
-      break;
-
-    }
-
-  }
-
-  if (!mimeType) {
-
-    throw new Error(
-      "इस browser में video recording supported नहीं है।"
-    );
-
-  }
-
-  const recorder =
-    new MediaRecorder(
-      stream,
-      {
-        mimeType
-      }
-    );
-
-  const chunks =
-    [];
-
-  recorder.ondataavailable =
-    event => {
-
-      if (
-        event.data.size
-      ) {
-
-        chunks.push(
-          event.data
-        );
-
-      }
-
-    };
-
-
-  const blobPromise =
-    new Promise(
-      resolve => {
-
-        recorder.onstop =
-          () => {
-
-            resolve(
-              new Blob(
-                chunks,
-                {
-                  type:
-                    mimeType
-                }
-              )
-            );
-
-          };
-
-      }
-    );
-
-
-  recorder.start(
-    250
-  );
-
-  const start =
-    Number(
-      $("startTime").value || 0
-    );
-
-  const end =
-    Number(
-      $("endTime").value ||
-      video.duration
-    );
-
-  video.currentTime =
-    start;
-
-  video.muted =
-    true;
-
-  await video.play();
-
-  const duration =
-    Math.max(
-      0.1,
-      end - start
-    );
-
-  const startedAt =
-    performance.now();
-
-
-  return new Promise(
-    resolve => {
-
-      function tick() {
-
-        const elapsed =
-          (
-            performance.now() -
-            startedAt
-          ) / 1000;
-
-        const percent =
-          Math.min(
-            100,
-            (
-              elapsed /
-              duration
-            ) * 100
-          );
-
-        progressBar.style.width =
-          `${percent}%`;
-
-        progressText.textContent =
-          `Exporting ${Math.round(percent)}%`;
-
-        if (
-          elapsed >= duration ||
-          video.currentTime >= end
-        ) {
-
-          video.pause();
-
-          recorder.stop();
-
-          resolve(
-            blobPromise
-          );
-
-          return;
-
-        }
-
-        requestAnimationFrame(
-          tick
-        );
-
-      }
-
-      tick();
-
-    }
-  );
-
-}
-
-
-/* =========================================================
-   FFMPEG MP4 CONVERSION
-========================================================= */
-
-async function convertToMP4(
-  webmBlob
-) {
-
-  progressText.textContent =
-    "MP4 conversion शुरू हो रहा है...";
-
-  progressBar.style.width =
-    "10%";
-
-
-  if (
-    !window.FFmpeg ||
-    !window.FFmpegUtil
-  ) {
-
-    throw new Error(
-      "FFmpeg library उपलब्ध नहीं है। WebM format में export करें।"
-    );
-
-  }
-
-
-  const {
-    FFmpeg
-  } =
-    window.FFmpeg;
-
-  const {
-    fetchFile,
-    toBlobURL
-  } =
-    window.FFmpegUtil;
-
-
-  const ffmpeg =
-    new FFmpeg();
-
-
-  ffmpeg.on(
-    "progress",
-    ({ progress }) => {
-
-      const percent =
-        Math.round(
-          progress * 100
-        );
-
-      progressBar.style.width =
-        `${10 + percent * 0.9}%`;
-
-      progressText.textContent =
-        `MP4 conversion ${percent}%`;
-
-    }
-  );
-
-
-  const base =
-    "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd";
-
-
-  await ffmpeg.load({
-
-    coreURL:
-      await toBlobURL(
-        `${base}/ffmpeg-core.js`,
-        "text/javascript"
-      ),
-
-    wasmURL:
-      await toBlobURL(
-        `${base}/ffmpeg-core.wasm`,
-        "application/wasm"
-      )
-
-  });
-
-
-  await ffmpeg.writeFile(
-    "input.webm",
-    await fetchFile(
-      webmBlob
-    )
-  );
-
-
-  await ffmpeg.exec([
-    "-i",
-    "input.webm",
-
-    "-c:v",
-    "libx264",
-
-    "-preset",
-    "veryfast",
-
-    "-crf",
-    "23",
-
-    "-c:a",
-    "aac",
-
-    "-movflags",
-    "+faststart",
-
-    "output.mp4"
-  ]);
-
-
-  const data =
-    await ffmpeg.readFile(
-      "output.mp4"
-    );
-
-
-  return new Blob(
-    [data.buffer],
-    {
-      type:
-        "video/mp4"
-    }
-  );
-
-}
-
-
-/* =========================================================
-   DOWNLOAD
-========================================================= */
-
-function showDownload(
-  blob,
-  extension
-) {
-
-  if (
-    currentExportURL
-  ) {
-
-    URL.revokeObjectURL(
-      currentExportURL
-    );
-
-  }
-
-  currentExportURL =
-    URL.createObjectURL(
-      blob
-    );
-
-  downloadBox.innerHTML =
-    "";
-
-  const link =
-    document.createElement(
-      "a"
-    );
-
-  link.href =
-    currentExportURL;
-
-  link.download =
-    `ai-video-${Date.now()}.${extension}`;
-
-  link.textContent =
-    `⬇️ Download ${extension.toUpperCase()}`;
-
-  downloadBox.appendChild(
-    link
-  );
-
-}
-
-
-/* =========================================================
-   EXPORT BUTTON
+   EXPORT
 ========================================================= */
 
 $("exportBtn").addEventListener(
   "click",
-  async () => {
+  exportVideo
+);
 
-    try {
-
-      if (!videoFile) {
-
-        alert(
-          "पहले video upload करें।"
-        );
-
-        return;
-
-      }
-
-      downloadBox.innerHTML =
-        "";
-
-      progressBar.style.width =
-        "0%";
-
-      progressText.textContent =
-        "Export शुरू हो रहा है...";
+$("exportBtn2").addEventListener(
+  "click",
+  exportVideo
+);
 
 
-      const format =
-        $("exportFormat").value;
+async function exportVideo() {
 
+  if (exporting)
+    return;
 
-      const webm =
-        await exportWebM();
+  exporting = true;
 
+  setProgress(0);
 
-      if (
-        format === "webm"
-      ) {
+  $("exportMessage").textContent =
+    "Preparing premium export...";
 
-        progressBar.style.width =
-          "100%";
+  try {
 
-        progressText.textContent =
-          "Export पूरा हो गया।";
-
-        showDownload(
-          webm,
-          "webm"
-        );
-
-        return;
-
-      }
-
-
-      try {
-
-        const mp4 =
-          await convertToMP4(
-            webm
-          );
-
-        progressBar.style.width =
-          "100%";
-
-        progressText.textContent =
-          "MP4 Export पूरा हो गया।";
-
-        showDownload(
-          mp4,
-          "mp4"
-        );
-
-      } catch (
-        mp4Error
-      ) {
-
-        console.error(
-          mp4Error
-        );
-
-        progressText.textContent =
-          "MP4 conversion उपलब्ध नहीं हुआ। WebM export तैयार है।";
-
-        showDownload(
-          webm,
-          "webm"
-        );
-
-      }
-
-    } catch (
-      error
+    if (
+      state.bgSourceType === "none" &&
+      !bgCameraStream
     ) {
 
-      console.error(
-        error
+      throw new Error(
+        "पहले Background Video या Background Camera शुरू करें।"
       );
-
-      progressText.textContent =
-        "Export में error आया।";
-
-      alert(
-        error.message ||
-        "Video export नहीं हो सका।"
-      );
-
     }
 
+
+    const quality =
+      Number(
+        $("exportQuality").value
+      );
+
+    const fps =
+      Number(
+        $("exportFps").value
+      );
+
+    const bitrate =
+      Number(
+        $("exportBitrate").value
+      );
+
+
+    const originalWidth =
+      canvas.width;
+
+    const originalHeight =
+      canvas.height;
+
+
+    if (quality === 720) {
+
+      canvas.width = 1280;
+      canvas.height = 720;
+
+    } else if (quality === 1080) {
+
+      canvas.width = 1920;
+      canvas.height = 1080;
+
+    } else {
+
+      canvas.width = 2560;
+      canvas.height = 1440;
+    }
+
+
+    await setupAudio();
+
+    rebuildCameraAudio();
+
+    updateAudio();
+
+
+    const stream =
+      canvas.captureStream(fps);
+
+
+    if (
+      audioDestination &&
+      audioDestination.stream
+        .getAudioTracks()
+        .length
+    ) {
+
+      audioDestination.stream
+        .getAudioTracks()
+        .forEach(track => {
+          stream.addTrack(track);
+        });
+    }
+
+
+    let mime =
+      "video/webm;codecs=vp9,opus";
+
+    if (
+      !MediaRecorder.isTypeSupported(mime)
+    ) {
+
+      mime =
+        "video/webm;codecs=vp8,opus";
+    }
+
+    if (
+      !MediaRecorder.isTypeSupported(mime)
+    ) {
+
+      mime =
+        "video/webm";
+    }
+
+
+    const recorder =
+      new MediaRecorder(
+        stream,
+        {
+          mimeType: mime,
+          videoBitsPerSecond: bitrate,
+          audioBitsPerSecond: 192000
+        }
+      );
+
+
+    const chunks = [];
+
+    recorder.ondataavailable =
+      e => {
+
+        if (e.data.size)
+          chunks.push(e.data);
+      };
+
+
+    const done =
+      new Promise(resolve => {
+
+        recorder.onstop = resolve;
+      });
+
+
+    const wasPlaying =
+      !bgVideo.paused;
+
+    const startTime =
+      bgVideo.currentTime || 0;
+
+
+    if (
+      state.overlayType === "video"
+    ) {
+
+      try {
+        overlayVideo.currentTime =
+          startTime;
+      } catch (_) {}
+
+      overlayVideo.play().catch(() => {});
+    }
+
+
+    if (
+      state.bgSourceType === "video"
+    ) {
+
+      bgVideo.currentTime =
+        startTime;
+
+      await bgVideo.play().catch(() => {});
+    }
+
+
+    if (
+      state.musicEnabled &&
+      musicAudio.src
+    ) {
+
+      musicAudio.currentTime =
+        0;
+
+      musicAudio.play().catch(() => {});
+    }
+
+
+    recorder.start(200);
+
+    $("exportMessage").textContent =
+      "Recording premium video...";
+
+
+    const total =
+      state.bgSourceType === "video"
+        ? bgVideo.duration
+        : 30;
+
+    const start =
+      performance.now();
+
+
+    await new Promise(resolve => {
+
+      function check() {
+
+        const elapsed =
+          (performance.now() - start) / 1000;
+
+        let progress =
+          total
+            ? elapsed / total
+            : 0;
+
+        setProgress(
+          Math.min(95, progress * 95)
+        );
+
+        if (
+          state.bgSourceType === "video" &&
+          bgVideo.ended
+        ) {
+
+          resolve();
+          return;
+        }
+
+        if (
+          state.bgSourceType === "camera" &&
+          elapsed >= total
+        ) {
+
+          resolve();
+          return;
+        }
+
+        requestAnimationFrame(check);
+      }
+
+      check();
+    });
+
+
+    recorder.stop();
+
+    await done;
+
+
+    bgVideo.pause();
+
+    if (
+      state.overlayType === "video"
+    )
+      overlayVideo.pause();
+
+    if (
+      state.musicEnabled
+    )
+      musicAudio.pause();
+
+
+    setProgress(100);
+
+    const blob =
+      new Blob(
+        chunks,
+        {
+          type: mime
+        }
+      );
+
+
+    const url =
+      URL.createObjectURL(blob);
+
+    const a =
+      document.createElement("a");
+
+    a.href = url;
+
+    a.download =
+      "ai-video-editor-premium.webm";
+
+    document.body.appendChild(a);
+
+    a.click();
+
+    a.remove();
+
+
+    $("exportMessage").textContent =
+      "✅ Export complete — WebM video तैयार है।";
+
+
+    canvas.width =
+      originalWidth;
+
+    canvas.height =
+      originalHeight;
+
+    startRender();
+
+
+  } catch (err) {
+
+    console.error(err);
+
+    $("exportMessage").textContent =
+      "❌ Export error: " +
+      err.message;
+
+    alert(
+      "Export में समस्या हुई:\n\n" +
+      err.message
+    );
+
+  } finally {
+
+    exporting = false;
   }
-);
+}
 
 
 /* =========================================================
    INITIALIZE
 ========================================================= */
 
-video.addEventListener(
-  "loadedmetadata",
-  () => {
+async function initialize() {
 
-    setupCanvas();
+  try {
 
-    renderPreview();
+    await loadDevices();
 
-  }
-);
+  } catch (_) {}
 
+  applyLookDefaults("normal");
 
-video.addEventListener(
-  "play",
-  () => {
+  startRender();
 
-    if (!animationFrame) {
+  /*
+    Mobile browsers में camera/audio permission तभी
+    मांगी जाती है जब user button दबाता है।
+  */
+}
 
-      renderPreview();
-
-    }
-
-  }
-);
-
-
-video.addEventListener(
-  "loadeddata",
-  () => {
-
-    renderPreview();
-
-  }
-);
+initialize();
 
 
 /* =========================================================
-   START
+   CAMERA DEVICE REFRESH
 ========================================================= */
 
-progressBar.style.width =
-  "0%";
-
-progressText.textContent =
-  "Ready";
-
-console.log(
-  "AI Video Editor loaded successfully."
+navigator.mediaDevices?.addEventListener?.(
+  "devicechange",
+  loadDevices
 );
