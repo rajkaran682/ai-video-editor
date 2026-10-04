@@ -1,9 +1,208 @@
 <!doctype html>
-<html lang="hi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><meta name="theme-color" content="#0b0c13"><title>AI Video Editor Pro Studio</title><link rel="stylesheet" href="/style.css"></head>
+<html lang="hi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#080b12">
+<title>AI Video Editor Pro</title>
+<link rel="stylesheet" href="/style.css">
+</head>
 <body>
-<header><div class="brand">✦ <div><b>AI Video Editor Pro</b><small>Wedding & Event Studio</small></div></div><button id="newProject">＋ नया प्रोजेक्ट</button></header>
-<main>
-<section class="workspace"><div class="preview card"><div class="topline"><span id="status">तैयार</span><div><select id="ratio"><option value="9:16">9:16 Portrait</option><option value="16:9">16:9 Landscape</option><option value="1:1">1:1 Square</option></select><select id="quality"><option value="480">480p</option><option value="720">720p</option><option value="1080" selected>1080p</option></select></div></div><div class="canvasBox"><canvas id="stage"></canvas></div><div class="actions"><button id="play">▶ Preview</button><button id="export" class="primary">● Export Video</button><progress id="progress" max="100" value="0"></progress></div></div>
-<div class="timeline card"><div><b>Timeline</b><span id="clock">00:00 / 00:30</span></div><input id="seek" type="range" min="0" max="30" step=".01" value="0"></div></section>
-<aside class="card"><nav id="tabs"></nav><div id="pages"></div></aside>
-</main><script src="/app.js"></script></body></html>
+<header class="top">
+  <div>
+    <h1>🎬 AI Video Editor Pro</h1>
+    <p>Professional • Wedding • Reels • Camera • Text • Effects</p>
+  </div>
+  <div class="top-actions">
+    <label class="select"><span>Ratio</span>
+      <select id="ratio"><option value="16:9">16:9</option><option value="9:16">9:16</option><option value="1:1">1:1</option><option value="4:5">4:5</option></select>
+    </label>
+    <label class="select"><span>Quality</span>
+      <select id="quality"><option value="720">720p</option><option value="1080">1080p</option></select>
+    </label>
+  </div>
+</header>
+
+<main class="layout">
+<section class="stage-card">
+  <div class="stage-wrap">
+    <canvas id="canvas"></canvas>
+    <video id="hiddenVideo" playsinline muted></video>
+    <div id="stageMessage">वीडियो या फोटो चुनें</div>
+  </div>
+  <div class="transport">
+    <button id="playBtn" class="primary">▶ Play</button>
+    <button id="pauseBtn">⏸ Pause</button>
+    <button id="restartBtn">↺ Start</button>
+    <span id="timeLabel">00:00 / 00:00</span>
+  </div>
+  <input id="timeline" type="range" min="0" max="30" value="0" step="0.01">
+  <div id="status" class="status">Ready</div>
+  <div id="errorBox" class="error hidden"></div>
+</section>
+
+<section class="panel">
+  <div class="tabs" id="tabs">
+    <button class="tab active" data-page="media">🎞️ Media</button>
+    <button class="tab" data-page="camera">📷 Camera</button>
+    <button class="tab" data-page="frame">🖼️ Frame</button>
+    <button class="tab" data-page="text">✍️ Text</button>
+    <button class="tab" data-page="effects">✨ Effects</button>
+    <button class="tab" data-page="color">🎨 Color</button>
+    <button class="tab" data-page="audio">🔊 Audio</button>
+    <button class="tab" data-page="template">💍 Templates</button>
+  </div>
+
+  <div id="pages">
+    <div class="page active" data-page="media">
+      <div class="grid two">
+        <div class="card">
+          <h2>Background Media</h2>
+          <input id="bgFile" type="file" accept="video/*,image/*">
+          <div class="small">मुख्य वीडियो/फोटो</div>
+          <div class="row">
+            <button data-fit="cover" class="fit active">Cover</button>
+            <button data-fit="contain" class="fit">Fit</button>
+            <button data-fit="stretch" class="fit">Stretch</button>
+          </div>
+        </div>
+        <div class="card">
+          <h2>Frame Media</h2>
+          <input id="frameFile" type="file" accept="video/*,image/*">
+          <div class="small">ऊपर चलने वाला फोटो/वीडियो</div>
+          <div class="row">
+            <button data-frame-fit="cover" class="ffit active">Cover</button>
+            <button data-frame-fit="contain" class="ffit">Fit</button>
+            <button data-frame-fit="stretch" class="ffit">Stretch</button>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Frame Media Position</h2>
+        <div class="grid three">
+          <label>X <input id="fx" type="range" min="-50" max="50" value="0"></label>
+          <label>Y <input id="fy" type="range" min="-50" max="50" value="0"></label>
+          <label>Zoom <input id="fs" type="range" min="15" max="100" value="55"></label>
+          <label>Rotate <input id="fr" type="range" min="-180" max="180" value="0"></label>
+        </div>
+      </div>
+    </div>
+
+    <div class="page" data-page="camera">
+      <div class="grid two">
+        <div class="card">
+          <h2>Background Camera</h2>
+          <div class="row">
+            <button id="bgFront" class="primary">Front</button>
+            <button id="bgBack">Back</button>
+            <button id="bgStop">Stop</button>
+          </div>
+          <div id="bgCamStatus" class="small">Camera बंद</div>
+        </div>
+        <div class="card">
+          <h2>Frame Camera</h2>
+          <div class="row">
+            <button id="frameFront" class="primary">Front</button>
+            <button id="frameBack">Back</button>
+            <button id="frameStop">Stop</button>
+          </div>
+          <div id="frameCamStatus" class="small">Camera बंद</div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Camera Recording</h2>
+        <p class="small">Camera preview canvas में दिखाई देगा और Export में canvas stream रिकॉर्ड होगा।</p>
+      </div>
+    </div>
+
+    <div class="page" data-page="frame">
+      <div class="card">
+        <h2>Premium Frames</h2>
+        <div id="frameGrid" class="asset-grid"></div>
+      </div>
+      <div class="card">
+        <label>Frame Opacity <input id="frameOpacity" type="range" min="0" max="100" value="100"></label>
+        <label>Border Width <input id="borderWidth" type="range" min="2" max="80" value="18"></label>
+      </div>
+    </div>
+
+    <div class="page" data-page="text">
+      <div class="card">
+        <h2>Text Studio</h2>
+        <textarea id="textInput" rows="3" placeholder="अपना टेक्स्ट लिखें..."></textarea>
+        <div class="grid two">
+          <label>Size <input id="textSize" type="range" min="18" max="180" value="62"></label>
+          <label>Opacity <input id="textOpacity" type="range" min="0" max="100" value="100"></label>
+          <label>Text Color <input id="textColor" type="color" value="#ffffff"></label>
+          <label>Background <input id="textBg" type="color" value="#000000"></label>
+        </div>
+        <div class="grid two">
+          <label>Font
+            <select id="font">
+              <option>Arial</option><option>Georgia</option><option>Verdana</option><option>Impact</option><option>Trebuchet MS</option>
+            </select>
+          </label>
+          <label>Style
+            <select id="fontStyle"><option value="normal">Normal</option><option value="bold">Bold</option><option value="italic">Italic</option><option value="bold italic">Bold Italic</option></select>
+          </label>
+          <label>Align
+            <select id="textAlign"><option>center</option><option>left</option><option>right</option></select>
+          </label>
+          <label>Animation
+            <select id="textAnim"><option value="none">Static</option><option value="float">Float</option><option value="pulse">Pulse</option><option value="slide">Slide</option><option value="typewriter">Typewriter</option></select>
+          </label>
+        </div>
+        <div id="textStyles" class="asset-grid"></div>
+      </div>
+    </div>
+
+    <div class="page" data-page="effects">
+      <div class="card">
+        <h2>Magical Effects</h2>
+        <div id="effectGrid" class="asset-grid"></div>
+        <div class="grid two">
+          <label>Intensity <input id="effectIntensity" type="range" min="0" max="100" value="60"></label>
+          <label>Speed <input id="effectSpeed" type="range" min="10" max="200" value="80"></label>
+        </div>
+      </div>
+    </div>
+
+    <div class="page" data-page="color">
+      <div class="card">
+        <h2>Color Studio</h2>
+        <div id="lookGrid" class="asset-grid"></div>
+        <div class="grid three">
+          <label>Brightness <input id="brightness" type="range" min="50" max="160" value="100"></label>
+          <label>Contrast <input id="contrast" type="range" min="50" max="160" value="100"></label>
+          <label>Saturation <input id="saturation" type="range" min="0" max="200" value="100"></label>
+        </div>
+      </div>
+    </div>
+
+    <div class="page" data-page="audio">
+      <div class="card">
+        <h2>Audio Studio</h2>
+        <label>Video Volume <input id="videoVolume" type="range" min="0" max="100" value="100"></label>
+        <label>Frame Volume <input id="frameVolume" type="range" min="0" max="100" value="100"></label>
+        <label>Music Volume <input id="musicVolume" type="range" min="0" max="100" value="70"></label>
+        <input id="musicFile" type="file" accept="audio/*">
+        <div class="small">Music file चुना जा सकता है। इस browser-only version में visual editor export canvas आधारित है।</div>
+      </div>
+    </div>
+
+    <div class="page" data-page="template">
+      <div class="card">
+        <h2>Professional Templates</h2>
+        <div id="templateGrid" class="asset-grid"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="export-bar">
+    <button id="exportBtn" class="primary big">⬇️ Export & Download</button>
+  </div>
+</section>
+</main>
+<script src="/app.js" defer></script>
+</body>
+</html>
