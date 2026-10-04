@@ -5,24 +5,15 @@ const app = express();
 const PORT = process.env.PORT || 10000;
 
 app.disable("x-powered-by");
-
-app.use((req, res, next) => {
-  res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
-  res.setHeader("Cross-Origin-Embedder-Policy", "require-corp");
-  res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
-  next();
-});
-
-app.use(express.static(path.join(__dirname, "public")));
+app.use(express.json({ limit: "2mb" }));
+app.use(express.static(path.join(__dirname, "public"), {
+  extensions: ["html"]
+}));
 
 app.get("/health", (req, res) => {
-  res.json({
-    ok: true,
-    service: "ai-video-editor"
-  });
+  res.json({ ok: true, app: "AI Video Editor", version: "4.0.0" });
 });
 
-// Express 5 compatible fallback
 app.use((req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
