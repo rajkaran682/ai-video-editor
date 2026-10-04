@@ -1,4 +1,9 @@
-<!doctype html><html lang="hi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0b0b12"><title>AI Video Editor Pro</title><link rel="stylesheet" href="/style.css"></head><body>
-<header><b>✦ AI Video Editor Pro</b><small>Wedding & Event Studio</small><button id="new">＋ New</button></header>
-<main><section class="work"><div class="preview"><div class="bar"><span id="status">Ready</span><select id="ratio"><option>9:16</option><option>16:9</option><option>1:1</option></select><select id="quality"><option>720</option><option selected>1080</option><option>480</option></select></div><canvas id="stage"></canvas><div class="actions"><button id="play">▶ Preview</button><button id="export">● Export Video</button><progress id="progress" max="100" value="0"></progress></div></div><div class="timeline"><b>Timeline</b><span id="clock">00:00 / 00:30</span><input id="seek" type="range" min="0" max="30" value="0" step=".01"></div></section>
-<aside><nav id="tabs"></nav><div id="pages"></div></aside></main><script src="/app.js"></script></body></html>
+<!doctype html>
+<html lang="hi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><meta name="theme-color" content="#0b0c13"><title>AI Video Editor Pro Studio</title><link rel="stylesheet" href="/style.css"></head>
+<body>
+<header><div class="brand">✦ <div><b>AI Video Editor Pro</b><small>Wedding & Event Studio</small></div></div><button id="newProject">＋ नया प्रोजेक्ट</button></header>
+<main>
+<section class="workspace"><div class="preview card"><div class="topline"><span id="status">तैयार</span><div><select id="ratio"><option value="9:16">9:16 Portrait</option><option value="16:9">16:9 Landscape</option><option value="1:1">1:1 Square</option></select><select id="quality"><option value="480">480p</option><option value="720">720p</option><option value="1080" selected>1080p</option></select></div></div><div class="canvasBox"><canvas id="stage"></canvas></div><div class="actions"><button id="play">▶ Preview</button><button id="export" class="primary">● Export Video</button><progress id="progress" max="100" value="0"></progress></div></div>
+<div class="timeline card"><div><b>Timeline</b><span id="clock">00:00 / 00:30</span></div><input id="seek" type="range" min="0" max="30" step=".01" value="0"></div></section>
+<aside class="card"><nav id="tabs"></nav><div id="pages"></div></aside>
+</main><script src="/app.js"></script></body></html>
